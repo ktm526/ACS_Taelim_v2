@@ -1,0 +1,32 @@
+# ── Dependencies ──
+node_modules/
+
+# ── Build output ──
+frontend/dist/
+
+# ── Database ──
+backend/*.sqlite
+backend/*.sqlite-journal
+
+# ── Environment ──
+.env
+.env.local
+.env.*.local
+
+# ── OS generated files ──
+.DS_Store
+Thumbs.db
+
+# ── Editor / IDE ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Logs ──
+*.log
+npm-debug.log*
+
+# ── Misc ──
+.cursor/
