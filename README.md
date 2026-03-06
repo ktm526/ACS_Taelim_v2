@@ -288,9 +288,3 @@ node fake-amr-server.js
 | **역할** | `admin` |
 
 > ⚠️ 보안을 위해 운영 환경에서는 반드시 비밀번호를 변경하세요.
-
----
-
-## 라이선스
-
-Private Repository
