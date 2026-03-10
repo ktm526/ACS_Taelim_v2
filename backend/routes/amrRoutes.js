@@ -16,4 +16,7 @@ router.delete('/:id', amrController.deleteAmr);
 // ── 네비게이션 ──
 router.post('/:id/navigate', amrController.navigate);
 
+// ── Doosan 로봇 팔 상태 ──
+router.get('/:id/arm-state', amrController.getArmState);
+
 module.exports = router;

@@ -64,10 +64,75 @@ async function getMesUrl(path) {
 //  AMR 상태 Payload 생성
 // ─────────────────────────────────────────────
 
+/** 숫자를 REAL(소수점)로 변환. INTEGER → float 처리 */
+function toReal(v) {
+  const n = Number(v);
+  return isNaN(n) ? 0.0 : parseFloat(n.toFixed(4));
+}
+
+/**
+ * Doosan 응답을 인터페이스 정의서의 arm_info 객체로 변환
+ */
+function buildArmInfo(doosanState) {
+  if (!doosanState) return [];
+
+  const s = doosanState;
+  const ts = s.TASK_STATUS;
+  const isBusy = ts !== '0' && ts !== 0;
+
+  return [{
+    arm_joint1_pos: toReal(s.JOINT_POSITION_1),
+    arm_joint2_pos: toReal(s.JOINT_POSITION_2),
+    arm_joint3_pos: toReal(s.JOINT_POSITION_3),
+    arm_joint4_pos: toReal(s.JOINT_POSITION_4),
+    arm_joint5_pos: toReal(s.JOINT_POSITION_5),
+    arm_joint6_pos: toReal(s.JOINT_POSITION_6),
+    arm_joint1_speed: toReal(s.JOINT_VELOCITY_1),
+    arm_joint2_speed: toReal(s.JOINT_VELOCITY_2),
+    arm_joint3_speed: toReal(s.JOINT_VELOCITY_3),
+    arm_joint4_speed: toReal(s.JOINT_VELOCITY_4),
+    arm_joint5_speed: toReal(s.JOINT_VELOCITY_5),
+    arm_joint6_speed: toReal(s.JOINT_VELOCITY_6),
+    arm_joint1_ampere: toReal(s.JOINT_MOTOR_CURRENT_1),
+    arm_joint2_ampere: toReal(s.JOINT_MOTOR_CURRENT_2),
+    arm_joint3_ampere: toReal(s.JOINT_MOTOR_CURRENT_3),
+    arm_joint4_ampere: toReal(s.JOINT_MOTOR_CURRENT_4),
+    arm_joint5_ampere: toReal(s.JOINT_MOTOR_CURRENT_5),
+    arm_joint6_ampere: toReal(s.JOINT_MOTOR_CURRENT_6),
+    arm_joint1_temp: toReal(s.JOINT_MOTOR_TEMPERATURE_1),
+    arm_joint2_temp: toReal(s.JOINT_MOTOR_TEMPERATURE_2),
+    arm_joint3_temp: toReal(s.JOINT_MOTOR_TEMPERATURE_3),
+    arm_joint4_temp: toReal(s.JOINT_MOTOR_TEMPERATURE_4),
+    arm_joint5_temp: toReal(s.JOINT_MOTOR_TEMPERATURE_5),
+    arm_joint6_temp: toReal(s.JOINT_MOTOR_TEMPERATURE_6),
+    arm_joint1_torque: toReal(s.JOINT_TORQUE_1),
+    arm_joint2_torque: toReal(s.JOINT_TORQUE_2),
+    arm_joint3_torque: toReal(s.JOINT_TORQUE_3),
+    arm_joint4_torque: toReal(s.JOINT_TORQUE_4),
+    arm_joint5_torque: toReal(s.JOINT_TORQUE_5),
+    arm_joint6_torque: toReal(s.JOINT_TORQUE_6),
+    arm_status: isBusy ? 'BUSY' : 'READY',
+    arm_error_code: parseInt(s.ROBOT_ERROR, 10) || 0,
+    arm_stop_code: 0,
+  }];
+}
+
 async function buildPayload() {
+  // armService는 순환 의존 방지를 위해 lazy require
+  const { getDoosanArmState } = require('./armService');
+
   const amrs = await Amr.findAll();
 
-  const amrList = amrs.map((a) => ({
+  // 모든 AMR에 대해 Doosan 상태를 병렬 조회
+  const armStates = await Promise.all(
+    amrs.map((a) =>
+      a.ip
+        ? getDoosanArmState(a.ip).catch(() => null)
+        : Promise.resolve(null)
+    )
+  );
+
+  const amrList = amrs.map((a, i) => ({
     amr_id: a.amr_id,
     amr_name: a.amr_name,
     map: a.map || '',
@@ -81,6 +146,7 @@ async function buildPayload() {
     task_id: a.task_id || 0,
     error_code: a.error_code ? parseInt(a.error_code, 10) || 0 : 0,
     stop_code: a.stop_code ? parseInt(a.stop_code, 10) || 0 : 0,
+    arm_info: buildArmInfo(armStates[i]),
   }));
 
   return {

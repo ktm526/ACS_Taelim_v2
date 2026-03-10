@@ -743,8 +743,10 @@ function ArmCommandTestTab() {
         amr_name: values.amr_name,
         action: values.action,
         params: {
-          from_location_id: values.from_location_id,
-          to_location_id: values.to_location_id,
+          from_location_id1: values.from_location_id1,
+          from_location_id2: values.from_location_id2,
+          to_location_id1: values.to_location_id1,
+          to_location_id2: values.to_location_id2,
           vision_check: values.vision_check ?? 0,
         },
       };
@@ -815,8 +817,8 @@ function ArmCommandTestTab() {
         if (!p) return '-';
         try {
           const obj = JSON.parse(p);
-          if (obj.from_location_id != null) {
-            return `FROM:${obj.from_location_id} → TO:${obj.to_location_id} (vision:${obj.vision_check ?? '-'})`;
+          if (obj.from_location_id1 != null) {
+            return `FROM:${obj.from_location_id1}→${obj.from_location_id2} TO:${obj.to_location_id1}→${obj.to_location_id2} (vision:${obj.vision_check ?? '-'})`;
           }
           return obj.station_id || p;
         } catch {
@@ -915,27 +917,49 @@ function ArmCommandTestTab() {
           </Form.Item>
 
           <Form.Item
-            name="from_location_id"
-            label="From"
+            name="from_location_id1"
+            label="From1"
             rules={actionValue !== 'CANCEL' ? [{ required: true, message: '필수' }] : []}
-            style={{ minWidth: 120 }}
+            style={{ minWidth: 110 }}
           >
-            <InputNumber
-              placeholder="22"
-              style={{ width: '100%' }}
+            <Input
+              placeholder="022"
               disabled={actionValue === 'CANCEL'}
             />
           </Form.Item>
 
           <Form.Item
-            name="to_location_id"
-            label="To"
+            name="from_location_id2"
+            label="From2"
             rules={actionValue !== 'CANCEL' ? [{ required: true, message: '필수' }] : []}
-            style={{ minWidth: 120 }}
+            style={{ minWidth: 110 }}
           >
-            <InputNumber
-              placeholder="61"
-              style={{ width: '100%' }}
+            <Input
+              placeholder="024"
+              disabled={actionValue === 'CANCEL'}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="to_location_id1"
+            label="To1"
+            rules={actionValue !== 'CANCEL' ? [{ required: true, message: '필수' }] : []}
+            style={{ minWidth: 110 }}
+          >
+            <Input
+              placeholder="061"
+              disabled={actionValue === 'CANCEL'}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="to_location_id2"
+            label="To2"
+            rules={actionValue !== 'CANCEL' ? [{ required: true, message: '필수' }] : []}
+            style={{ minWidth: 110 }}
+          >
+            <Input
+              placeholder="063"
               disabled={actionValue === 'CANCEL'}
             />
           </Form.Item>

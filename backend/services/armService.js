@@ -14,8 +14,10 @@ const { sendTaskResult } = require('./mesStatusService');
 const { writeLog } = require('./logService');
 
 // ── 포트 & API 코드 (환경변수 또는 기본값) ──
-const MANI_CMD_PORT = Number(process.env.MANI_CMD_PORT || 19207);
-const MANI_CMD_API  = Number(process.env.MANI_CMD_API  || 4021);  // 0x0FB5
+const MANI_CMD_PORT  = Number(process.env.MANI_CMD_PORT || 19207);
+const MANI_CMD_API   = Number(process.env.MANI_CMD_API  || 4021);  // 0x0FB5
+const DOOSAN_STATE_API  = Number(process.env.DOOSAN_STATE_API  || 4022);
+const DOOSAN_STATE_PORT = Number(process.env.DOOSAN_STATE_PORT || 19207);
 const ROBOT_IO_PORT = Number(process.env.ROBOT_IO_PORT || 19210);
 const ROBOT_DO_API  = Number(process.env.ROBOT_DO_API  || 6001);  // 0x1771
 const ROBOT_DI_API  = Number(process.env.ROBOT_DI_API  || 6020);  // 0x1784
@@ -96,14 +98,17 @@ function sendTcpCommand(ip, port, apiCode, payload, timeout = 5000) {
 /**
  * 매니퓰레이터 명령 전송
  * @param {string} ip
- * @param {object} params - { from_location_id, to_location_id, vision_check }
+ * @param {object} params - { from_location_id1, from_location_id2, to_location_id1, to_location_id2, vision_check }
+ * @param {boolean} [isCancel=false] - true면 CMD_STOP="1" (CANCEL)
  */
-async function sendManiCommand(ip, params) {
+async function sendManiCommand(ip, params, isCancel = false) {
   const cmdScript = {
     CMD_ID: String(params.CMD_ID || '1'),
-    CMD_FROM: String(params.from_location_id || '0'),
-    CMD_TO: String(params.to_location_id || '0'),
-    CMD_STOP: '0',
+    CMD_FROM_1: String(params.from_location_id1 || '0'),
+    CMD_TO_1: String(params.from_location_id2 || '0'),
+    CMD_FROM_2: String(params.to_location_id1 || '0'),
+    CMD_TO_2: String(params.to_location_id2 || '0'),
+    CMD_STOP: isCancel ? '1' : '0',
     VISION_CHECK: String(params.vision_check === 1 ? 1 : 0),
   };
   const body = {
@@ -253,6 +258,51 @@ function startArmMonitor() {
 }
 
 // ─────────────────────────────────────────────
+//  Doosan 로봇 팔 상태 조회
+// ─────────────────────────────────────────────
+
+const DOOSAN_STATE_MESSAGE = {
+  type: 'module',
+  relative_path: 'doosan_state.py',
+};
+
+/**
+ * Doosan 매니퓰레이터의 실시간 상태를 TCP로 조회
+ * 응답: TASK_STATUS, ROBOT_STATUS, JOINT_POSITION_1~6, JOINT_TORQUE_1~6, ...
+ */
+async function getDoosanArmState(ip) {
+  try {
+    const resp = await sendTcpCommand(
+      ip,
+      DOOSAN_STATE_PORT,
+      DOOSAN_STATE_API,
+      DOOSAN_STATE_MESSAGE,
+      3000,
+    );
+    return resp || null;
+  } catch (e) {
+    console.warn(`[ARM] Doosan 상태 조회 실패 (${ip}): ${e.message}`);
+    return null;
+  }
+}
+
+/**
+ * TASK_STATUS 확인 (0이 아니면 작업 중)
+ */
+async function checkDoosanTaskStatus(ip) {
+  try {
+    const state = await getDoosanArmState(ip);
+    if (state) {
+      const ts = state.TASK_STATUS;
+      return ts !== '0' && ts !== 0;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// ─────────────────────────────────────────────
 //  외부 노출
 // ─────────────────────────────────────────────
 
@@ -263,5 +313,7 @@ module.exports = {
   getDiStatus,
   activeArmTasks,
   startArmMonitor,
+  getDoosanArmState,
+  checkDoosanTaskStatus,
   MANI_WORK_DO_ID,
 };

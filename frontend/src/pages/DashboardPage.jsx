@@ -148,6 +148,10 @@ export default function DashboardPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // Doosan 로봇 팔 상태
+  const [armState, setArmState] = useState(null);
+  const [armStateLoading, setArmStateLoading] = useState(false);
+
   // AMR 추적
   const [trackAmrName, setTrackAmrName] = useState(null);
 
@@ -166,6 +170,34 @@ export default function DashboardPage() {
       if (updated) setDetailAmr(updated);
     }
   }, [amrs]);
+
+  // Doosan 로봇 팔 상태 2초 폴링
+  useEffect(() => {
+    if (!detailOpen || !detailAmr?.amr_id) {
+      setArmState(null);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchArmState = async () => {
+      setArmStateLoading(true);
+      try {
+        const res = await amrAPI.getArmState(detailAmr.amr_id);
+        if (!cancelled) setArmState(res.data);
+      } catch {
+        if (!cancelled) setArmState(null);
+      } finally {
+        if (!cancelled) setArmStateLoading(false);
+      }
+    };
+
+    fetchArmState();
+    const interval = setInterval(fetchArmState, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [detailOpen, detailAmr?.amr_id]);
 
   // 해당 AMR에 연결된 태스크들
   const amrTasks = useMemo(() => {
@@ -732,6 +764,142 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Doosan 로봇 팔 상태 */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <SectionTitle icon={<Bot size={14} style={{ flexShrink: 0 }} />}>
+                  로봇 팔 (Doosan)
+                </SectionTitle>
+                {armStateLoading && (
+                  <Text type="secondary" style={{ fontSize: 11 }}>갱신 중...</Text>
+                )}
+              </div>
+              <div style={{ marginTop: 8 }}>
+                {armState ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {/* 상태 태그 행 */}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <Tag color={
+                        armState.TASK_STATUS === '0' || armState.TASK_STATUS === 0
+                          ? 'green' : 'blue'
+                      }>
+                        TASK: {armState.TASK_STATUS === '0' || armState.TASK_STATUS === 0 ? '유휴' : '작업중'}
+                      </Tag>
+                      <Tag color={
+                        armState.ROBOT_ERROR && armState.ROBOT_ERROR !== '0' && armState.ROBOT_ERROR !== 0
+                          ? 'red' : 'green'
+                      }>
+                        ROBOT: {armState.ROBOT_STATUS ?? '-'}
+                      </Tag>
+                      {armState.ROBOT_ERROR && armState.ROBOT_ERROR !== '0' && armState.ROBOT_ERROR !== 0 && (
+                        <Tag color="red">ERR: {armState.ROBOT_ERROR}</Tag>
+                      )}
+                      {armState.VISION_ERROR && armState.VISION_ERROR !== '0' && armState.VISION_ERROR !== 0 && (
+                        <Tag color="orange">VISION ERR: {armState.VISION_ERROR}</Tag>
+                      )}
+                      {(armState.ROBOT_CMD_FROM || armState.ROBOT_CMD_TO) && (
+                        <Tag>
+                          {armState.ROBOT_CMD_FROM ?? '?'} → {armState.ROBOT_CMD_TO ?? '?'}
+                        </Tag>
+                      )}
+                    </div>
+
+                    {/* 6축 관절 데이터 그리드 */}
+                    {(() => {
+                      const joints = [1, 2, 3, 4, 5, 6];
+                      const cellStyle = {
+                        padding: '4px 6px',
+                        textAlign: 'center',
+                        fontSize: 11,
+                        borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                      };
+                      const headerStyle = {
+                        ...cellStyle,
+                        fontWeight: 600,
+                        background: token.colorBgLayout,
+                        color: token.colorTextSecondary,
+                      };
+                      const tempColor = (v) => {
+                        const n = Number(v);
+                        if (isNaN(n)) return token.colorText;
+                        if (n >= 50) return '#ff4d4f';
+                        if (n >= 40) return '#faad14';
+                        return '#52c41a';
+                      };
+                      const fmtNum = (v) => {
+                        const n = Number(v);
+                        return isNaN(n) ? '-' : n.toFixed(1);
+                      };
+
+                      return (
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'auto repeat(6, 1fr)',
+                          border: `1px solid ${token.colorBorderSecondary}`,
+                          borderRadius: token.borderRadius,
+                          overflow: 'hidden',
+                        }}>
+                          {/* 헤더 */}
+                          <div style={headerStyle} />
+                          {joints.map((j) => (
+                            <div key={`h-${j}`} style={headerStyle}>J{j}</div>
+                          ))}
+
+                          {/* 온도 */}
+                          <div style={headerStyle}>온도 (°C)</div>
+                          {joints.map((j) => {
+                            const v = armState[`JOINT_MOTOR_TEMPERATURE_${j}`];
+                            return (
+                              <div key={`t-${j}`} style={{ ...cellStyle, color: tempColor(v), fontWeight: 600 }}>
+                                {fmtNum(v)}
+                              </div>
+                            );
+                          })}
+
+                          {/* 위치 */}
+                          <div style={headerStyle}>위치 (°)</div>
+                          {joints.map((j) => (
+                            <div key={`p-${j}`} style={cellStyle}>
+                              {fmtNum(armState[`JOINT_POSITION_${j}`])}
+                            </div>
+                          ))}
+
+                          {/* 토크 */}
+                          <div style={headerStyle}>토크 (Nm)</div>
+                          {joints.map((j) => (
+                            <div key={`q-${j}`} style={cellStyle}>
+                              {fmtNum(armState[`JOINT_TORQUE_${j}`])}
+                            </div>
+                          ))}
+
+                          {/* 전류 */}
+                          <div style={{ ...headerStyle, borderBottom: 'none' }}>전류 (A)</div>
+                          {joints.map((j) => (
+                            <div key={`c-${j}`} style={{ ...cellStyle, borderBottom: 'none' }}>
+                              {fmtNum(armState[`JOINT_MOTOR_CURRENT_${j}`])}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      padding: '16px 0',
+                      textAlign: 'center',
+                      color: token.colorTextSecondary,
+                      fontSize: 13,
+                      background: token.colorBgLayout,
+                      borderRadius: token.borderRadius,
+                    }}
+                  >
+                    로봇 팔 상태를 가져올 수 없습니다
                   </div>
                 )}
               </div>

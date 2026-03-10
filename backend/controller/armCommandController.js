@@ -21,8 +21,13 @@ const { writeLog } = require('../services/logService');
 /**
  * POST /api/arm_command
  *
- * Request : { task_id, amr_name, action, params: { from_location_id, to_location_id, vision_check } }
+ * Request : { task_id, amr_name, action, params: { from_location_id1, from_location_id2, to_location_id1, to_location_id2, vision_check } }
  * Response: { result_msg, server_time }
+ *
+ * ACS → AMR TCP 매핑:
+ *   CMD_FROM_1 ← from_location_id1,  CMD_TO_1 ← from_location_id2
+ *   CMD_FROM_2 ← to_location_id1,    CMD_TO_2 ← to_location_id2
+ *   CMD_STOP   ← "0" (EXECUTE) | "1" (CANCEL)
  */
 const armCommand = async (req, res) => {
   const serverTime = new Date().toISOString();
@@ -58,10 +63,10 @@ const armCommand = async (req, res) => {
         });
       }
 
-      const { from_location_id, to_location_id, vision_check } = params;
-      if (from_location_id == null || to_location_id == null) {
+      const { from_location_id1, from_location_id2, to_location_id1, to_location_id2, vision_check } = params;
+      if (from_location_id1 == null || from_location_id2 == null || to_location_id1 == null || to_location_id2 == null) {
         return res.status(400).json({
-          result_msg: 'FAIL: params.from_location_id and params.to_location_id are required',
+          result_msg: 'FAIL: params requires from_location_id1, from_location_id2, to_location_id1, to_location_id2',
           server_time: serverTime,
         });
       }
@@ -109,13 +114,13 @@ const armCommand = async (req, res) => {
       // AMR task_id 설정
       await amrService.updateAmr(amr.amr_id, { task_id });
 
-      // TCP 명령 전송: 1) MANI 명령 → 2) DO 트리거
+      // TCP 명령 전송: 1) MANI 명령(CMD_STOP=0) → 2) DO 트리거
       try {
         console.log(`[ARM_CMD] EXECUTE: ${amr_name} (task_id=${task_id})`);
-        console.log(`[ARM_CMD]   from=${from_location_id}, to=${to_location_id}, vision=${vision_check}`);
+        console.log(`[ARM_CMD]   from1=${from_location_id1}, from2=${from_location_id2}, to1=${to_location_id1}, to2=${to_location_id2}, vision=${vision_check}`);
 
-        // 1) 매니퓰레이터 명령 전송
-        await sendManiCommand(amr.ip, params);
+        // 1) 매니퓰레이터 명령 전송 (CMD_STOP=0)
+        await sendManiCommand(amr.ip, params, false);
         console.log(`[ARM_CMD]   ✓ MANI 명령 전송 완료`);
 
         // 2) DO 트리거 (작업 시작 신호)
@@ -151,7 +156,7 @@ const armCommand = async (req, res) => {
     }
 
     /* ═══════════════════════════════════════════
-     *  CANCEL — 태스크 취소
+     *  CANCEL — 태스크 취소 (CMD_STOP=1 전송)
      * ═══════════════════════════════════════════ */
     if (upperAction === 'CANCEL') {
       if (task_id == null) {
@@ -176,16 +181,23 @@ const armCommand = async (req, res) => {
         });
       }
 
-      // 태스크 취소
-      await task.update({ task_status: 'CANCELLED', updated_at: new Date() });
-
-      // AMR task_id 리셋
       const amr = await Amr.findOne({ where: { amr_name: task.amr_name } });
-      if (amr) {
-        // DO 리셋
+
+      // TCP 명령 전송: CMD_STOP=1로 취소 명령
+      if (amr && amr.ip) {
+        try {
+          const savedParams = JSON.parse(task.param || '{}');
+          await sendManiCommand(amr.ip, savedParams, true);
+          console.log(`[ARM_CMD] CANCEL TCP 전송 완료: task_id=${task_id}`);
+        } catch (tcpErr) {
+          console.warn(`[ARM_CMD] CANCEL TCP 전송 실패 (무시): ${tcpErr.message}`);
+        }
         try { await setRobotDo(amr.ip, MANI_WORK_DO_ID, false); } catch {}
-        await amrService.updateAmr(amr.amr_id, { task_id: 0 });
       }
+
+      // 태스크 취소 + AMR task_id 리셋
+      await task.update({ task_status: 'CANCELLED', updated_at: new Date() });
+      if (amr) await amrService.updateAmr(amr.amr_id, { task_id: 0 });
 
       // 모니터에서 제거
       activeArmTasks.delete(task_id);

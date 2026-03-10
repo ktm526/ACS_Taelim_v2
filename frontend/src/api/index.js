@@ -16,6 +16,7 @@ export const amrAPI = {
   monitorStatus: () => api.get('/amrs/monitor/status'),
   reconnect: (amr_name) => api.post('/amrs/monitor/reconnect', { amr_name }),
   navigate: (id, dest_station) => api.post(`/amrs/${id}/navigate`, { dest_station }),
+  getArmState: (id) => api.get(`/amrs/${id}/arm-state`),
 };
 
 /* ── Task ── */
