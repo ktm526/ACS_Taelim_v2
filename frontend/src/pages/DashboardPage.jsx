@@ -154,6 +154,9 @@ export default function DashboardPage() {
   const [armState, setArmState] = useState(null);
   const [armStateLoading, setArmStateLoading] = useState(false);
 
+  // 태스크 더보기
+  const [taskShowAll, setTaskShowAll] = useState(false);
+
   // AMR 추적
   const [trackAmrName, setTrackAmrName] = useState(null);
 
@@ -314,6 +317,7 @@ export default function DashboardPage() {
                     onClick={() => {
                       setDetailAmr(amr);
                       setDetailOpen(true);
+                      setTaskShowAll(false);
                     }}
                     style={{
                       width: 200,
@@ -566,7 +570,7 @@ export default function DashboardPage() {
       <Modal
         title={
           detailAmr ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 24 }}>
               <StatusIcon status={detailAmr.status} size={20} />
               <span style={{ fontWeight: 600, fontSize: 16 }}>{detailAmr.amr_name}</span>
               <Tag
@@ -575,9 +579,11 @@ export default function DashboardPage() {
               >
                 {statusLabel(detailAmr.status)}
               </Tag>
-              <span style={{ marginLeft: 'auto', fontSize: 12, color: token.colorTextSecondary, fontWeight: 400 }}>
-                {detailAmr.ip || ''}
-              </span>
+              {detailAmr.ip && (
+                <Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
+                  ({detailAmr.ip})
+                </Text>
+              )}
             </div>
           ) : 'AMR 상세'
         }
@@ -734,65 +740,85 @@ export default function DashboardPage() {
                       />
                     </div>
                   ),
-                  children: amrTasks.length === 0 ? (
-                    <div style={{
-                      padding: '20px 0',
-                      textAlign: 'center',
-                      color: token.colorTextSecondary,
-                      fontSize: 13,
-                    }}>
-                      할당된 태스크가 없습니다
-                    </div>
-                  ) : (
-                    <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {amrTasks.map((task) => (
-                        <div
-                          key={task.task_id}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '6px 10px',
-                            background: task.task_status === 'RUNNING' ? `${token.colorPrimaryBg}` : token.colorBgLayout,
-                            borderRadius: token.borderRadius,
-                            fontSize: 12,
-                            borderLeft: task.task_status === 'RUNNING' ? `3px solid ${token.colorPrimary}` : '3px solid transparent',
-                          }}
-                        >
-                          <div style={{ ...iconTextRow, gap: 6 }}>
-                            <Text type="secondary" style={{ fontSize: 11, fontFamily: 'monospace' }}>
-                              #{task.task_id}
-                            </Text>
-                            <Tag
-                              color={task.task_type === 'ARM' ? 'purple' : 'cyan'}
-                              style={{ fontSize: 10, margin: 0, lineHeight: '16px', padding: '0 4px' }}
-                            >
-                              {task.task_type || '-'}
-                            </Tag>
-                            <Tag
-                              color={taskStatusColor(task.task_status)}
-                              style={{ fontSize: 10, margin: 0, lineHeight: '16px', padding: '0 4px' }}
-                            >
-                              {task.task_status}
-                            </Tag>
-                            {task.error_code && (
-                              <Text type="danger" style={{ fontSize: 10 }}>{task.error_code}</Text>
-                            )}
-                          </div>
-                          <Text type="secondary" style={{ fontSize: 10, flexShrink: 0 }}>
-                            {task.created_at
-                              ? new Date(task.created_at).toLocaleString('ko-KR', {
-                                  month: '2-digit',
-                                  day: '2-digit',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })
-                              : '-'}
-                          </Text>
+                  children: (() => {
+                    if (amrTasks.length === 0) {
+                      return (
+                        <div style={{
+                          padding: '20px 0',
+                          textAlign: 'center',
+                          color: token.colorTextSecondary,
+                          fontSize: 13,
+                        }}>
+                          할당된 태스크가 없습니다
                         </div>
-                      ))}
-                    </div>
-                  ),
+                      );
+                    }
+                    const TASK_LIMIT = 20;
+                    const visibleTasks = taskShowAll ? amrTasks : amrTasks.slice(0, TASK_LIMIT);
+                    const hiddenCount = amrTasks.length - TASK_LIMIT;
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ maxHeight: 240, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {visibleTasks.map((task) => (
+                            <div
+                              key={task.task_id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '6px 10px',
+                                background: task.task_status === 'RUNNING' ? `${token.colorPrimaryBg}` : token.colorBgLayout,
+                                borderRadius: token.borderRadius,
+                                fontSize: 12,
+                                borderLeft: task.task_status === 'RUNNING' ? `3px solid ${token.colorPrimary}` : '3px solid transparent',
+                              }}
+                            >
+                              <div style={{ ...iconTextRow, gap: 6 }}>
+                                <Text type="secondary" style={{ fontSize: 11, fontFamily: 'monospace' }}>
+                                  #{task.task_id}
+                                </Text>
+                                <Tag
+                                  color={task.task_type === 'ARM' ? 'purple' : 'cyan'}
+                                  style={{ fontSize: 10, margin: 0, lineHeight: '16px', padding: '0 4px' }}
+                                >
+                                  {task.task_type || '-'}
+                                </Tag>
+                                <Tag
+                                  color={taskStatusColor(task.task_status)}
+                                  style={{ fontSize: 10, margin: 0, lineHeight: '16px', padding: '0 4px' }}
+                                >
+                                  {task.task_status}
+                                </Tag>
+                                {task.error_code && (
+                                  <Text type="danger" style={{ fontSize: 10 }}>{task.error_code}</Text>
+                                )}
+                              </div>
+                              <Text type="secondary" style={{ fontSize: 10, flexShrink: 0 }}>
+                                {task.created_at
+                                  ? new Date(task.created_at).toLocaleString('ko-KR', {
+                                      month: '2-digit',
+                                      day: '2-digit',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })
+                                  : '-'}
+                              </Text>
+                            </div>
+                          ))}
+                        </div>
+                        {hiddenCount > 0 && (
+                          <Button
+                            type="link"
+                            size="small"
+                            onClick={() => setTaskShowAll((prev) => !prev)}
+                            style={{ alignSelf: 'center', fontSize: 12, padding: '4px 0' }}
+                          >
+                            {taskShowAll ? '접기' : `이전 태스크 ${hiddenCount}건 더보기`}
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })(),
                 },
                 {
                   key: 'arm',
