@@ -28,7 +28,7 @@ const MANI_WORK_OK_DI  = Number(process.env.MANI_WORK_OK_DI  || 11);
 const MANI_WORK_ERR_DI = Number(process.env.MANI_WORK_ERR_DI || 12);
 
 // ── 타임아웃 ──
-const MANI_WORK_TIMEOUT_MS = Number(process.env.MANI_WORK_TIMEOUT_MS || 300000); // 5분
+const MANI_WORK_TIMEOUT_MS = Number(process.env.MANI_WORK_TIMEOUT_MS || 600000); // 10분
 
 let _serial = 0;
 
@@ -105,8 +105,8 @@ async function sendManiCommand(ip, params, isCancel = false) {
   const cmdScript = {
     CMD_ID: String(params.CMD_ID || '1'),
     CMD_FROM_1: String(params.from_location_id1 || '0'),
-    CMD_TO_1: String(params.from_location_id2 || '0'),
-    CMD_FROM_2: String(params.to_location_id1 || '0'),
+    CMD_TO_1: String(params.to_location_id1 || '0'),
+    CMD_FROM_2: String(params.from_location_id2 || '0'),
     CMD_TO_2: String(params.to_location_id2 || '0'),
     CMD_STOP: isCancel ? '1' : '0',
     VISION_CHECK: String(params.vision_check === 1 ? 1 : 0),
