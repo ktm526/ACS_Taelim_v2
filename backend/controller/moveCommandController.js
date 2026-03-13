@@ -79,6 +79,24 @@ const moveCommand = async (req, res) => {
         });
       }
 
+      // 현재 위치 == 목적지 → 이동 불필요, 즉시 완료
+      if (amr.current_station_id && amr.current_station_id === station_id) {
+        const task = await Task.create({
+          task_id,
+          amr_name,
+          task_type: 'MOVE',
+          task_status: 'FINISHED',
+          param: JSON.stringify({ station_id }),
+          created_at: new Date(),
+          updated_at: new Date(),
+        });
+        console.log(`[MOVE_CMD] 현재 위치 == 목적지(${station_id}) → 즉시 FINISHED (task_id=${task_id})`);
+        sendTaskResult({ task_id, amr_name, task_type: 'MOVE', task_status: 'FINISHED', error_code: 0 });
+        const okResp = { result_msg: 'OK', server_time: serverTime };
+        writeLog({ log_type: 'API', direction: 'INBOUND', interface_id: 'MOVE_COMMAND', method: 'POST', status: 'SUCCESS', request_data: req.body, response_data: okResp, amr_name, task_id });
+        return res.json(okResp);
+      }
+
       // 태스크 생성
       const task = await Task.create({
         task_id,

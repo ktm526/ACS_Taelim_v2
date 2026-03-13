@@ -15,6 +15,8 @@ import {
   Popconfirm,
   message,
   Tooltip,
+  Collapse,
+  Badge,
   theme,
 } from 'antd';
 import {
@@ -314,7 +316,7 @@ export default function DashboardPage() {
                       setDetailOpen(true);
                     }}
                     style={{
-                      width: 150,
+                      width: 200,
                       padding: '10px 14px',
                       cursor: 'pointer',
                       display: 'flex',
@@ -564,15 +566,18 @@ export default function DashboardPage() {
       <Modal
         title={
           detailAmr ? (
-            <div style={iconTextRow}>
-              <StatusIcon status={detailAmr.status} size={18} />
-              <span style={{ fontWeight: 600 }}>{detailAmr.amr_name}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <StatusIcon status={detailAmr.status} size={20} />
+              <span style={{ fontWeight: 600, fontSize: 16 }}>{detailAmr.amr_name}</span>
               <Tag
                 color={statusColor(detailAmr.status)}
-                style={{ margin: 0 }}
+                style={{ margin: 0, fontSize: 12 }}
               >
                 {statusLabel(detailAmr.status)}
               </Tag>
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: token.colorTextSecondary, fontWeight: 400 }}>
+                {detailAmr.ip || ''}
+              </span>
             </div>
           ) : 'AMR 상세'
         }
@@ -603,307 +608,307 @@ export default function DashboardPage() {
           </div>
         }
         onCancel={() => setDetailOpen(false)}
-        width={560}
+        width={620}
+        styles={{ body: { maxHeight: 'calc(100vh - 260px)', overflowY: 'auto', padding: '16px 24px' } }}
       >
         {detailAmr && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* 기본 정보 */}
-            <Descriptions
-              size="small"
-              column={2}
-              bordered
-              title={
-                <SectionTitle icon={<Info size={14} style={{ flexShrink: 0 }} />}>
-                  기본 정보
-                </SectionTitle>
-              }
-            >
-              <Descriptions.Item label="AMR ID">{detailAmr.amr_id}</Descriptions.Item>
-              <Descriptions.Item label="IP">{detailAmr.ip || '-'}</Descriptions.Item>
-              <Descriptions.Item label="상태">
-                <Tag color={statusColor(detailAmr.status)} style={{ margin: 0 }}>
-                  {statusLabel(detailAmr.status)}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="배터리">
-                <div style={iconTextRow}>
-                  <Battery size={13} style={{ flexShrink: 0 }} />
-                  <span>{detailAmr.battery != null ? `${Math.round(detailAmr.battery)}%` : '-'}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* ── 요약 카드 ── */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: 8,
+            }}>
+              {[
+                {
+                  label: '배터리',
+                  value: detailAmr.battery != null ? `${Math.round(detailAmr.battery)}%` : '-',
+                  icon: <Battery size={14} />,
+                  color: detailAmr.battery >= 50 ? '#52c41a' : detailAmr.battery >= 20 ? '#faad14' : '#ff4d4f',
+                },
+                {
+                  label: '현재 위치',
+                  value: detailAmr.current_station_id || '-',
+                  icon: <MapPin size={14} />,
+                },
+                {
+                  label: '목적지',
+                  value: detailAmr.dest_station_id || '-',
+                  icon: <Navigation size={14} />,
+                },
+                {
+                  label: '좌표',
+                  value: detailAmr.pos_x != null
+                    ? `${detailAmr.pos_x.toFixed(1)}, ${detailAmr.pos_y.toFixed(1)}`
+                    : '-',
+                  icon: <Compass size={14} />,
+                },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  style={{
+                    padding: '10px 12px',
+                    background: token.colorBgLayout,
+                    borderRadius: token.borderRadiusLG,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
+                  }}
+                >
+                  <div style={{ ...iconTextRow, color: token.colorTextSecondary, fontSize: 11 }}>
+                    {item.icon}
+                    <span>{item.label}</span>
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: item.color || token.colorText }}>
+                    {item.value}
+                  </div>
                 </div>
-              </Descriptions.Item>
-            </Descriptions>
+              ))}
+            </div>
 
-            {/* 위치 & 이동 정보 */}
-            <Descriptions
-              size="small"
-              column={2}
-              bordered
-              title={
-                <SectionTitle icon={<Compass size={14} style={{ flexShrink: 0 }} />}>
-                  위치 / 이동
-                </SectionTitle>
-              }
-            >
-              <Descriptions.Item label="좌표 (X, Y)">
-                {detailAmr.pos_x != null
-                  ? `(${detailAmr.pos_x.toFixed(2)}, ${detailAmr.pos_y.toFixed(2)})`
-                  : '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="각도">
-                {detailAmr.deg != null ? `${detailAmr.deg.toFixed(1)}°` : '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="현재 위치">
-                {detailAmr.current_station_id || '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="목적지">
-                {detailAmr.dest_station_id || '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="맵">
-                {detailAmr.map || '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="마지막 수신">
-                {detailAmr.timestamp
-                  ? new Date(detailAmr.timestamp).toLocaleString('ko-KR')
-                  : '-'}
-              </Descriptions.Item>
-            </Descriptions>
-
-            {/* 에러 / 정지 정보 */}
+            {/* ── 에러 배너 (있을 때만) ── */}
             {(detailAmr.error_code || detailAmr.stop_code) && (
-              <Descriptions
-                size="small"
-                column={2}
-                bordered
-                title={
-                  <SectionTitle
-                    icon={<AlertTriangle size={14} style={{ flexShrink: 0 }} />}
-                    color={token.colorError}
-                  >
-                    이상 정보
-                  </SectionTitle>
-                }
-              >
-                <Descriptions.Item label="에러 코드">
-                  {detailAmr.error_code ? (
-                    <Text type="danger">{detailAmr.error_code}</Text>
-                  ) : '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="정지 코드">
-                  {detailAmr.stop_code ? (
-                    <Text type="warning">{detailAmr.stop_code}</Text>
-                  ) : '-'}
-                </Descriptions.Item>
-              </Descriptions>
+              <div style={{
+                display: 'flex',
+                gap: 12,
+                padding: '8px 12px',
+                background: '#fff2f0',
+                border: '1px solid #ffccc7',
+                borderRadius: token.borderRadiusLG,
+                fontSize: 13,
+              }}>
+                <AlertTriangle size={16} style={{ color: '#ff4d4f', flexShrink: 0, marginTop: 1 }} />
+                <div style={{ display: 'flex', gap: 16 }}>
+                  {detailAmr.error_code && (
+                    <span>에러 코드: <Text type="danger" strong>{detailAmr.error_code}</Text></span>
+                  )}
+                  {detailAmr.stop_code && (
+                    <span>정지 코드: <Text type="warning" strong>{detailAmr.stop_code}</Text></span>
+                  )}
+                </div>
+              </div>
             )}
 
-            {/* 태스크 정보 */}
-            <div>
-              <SectionTitle icon={<Activity size={14} style={{ flexShrink: 0 }} />}>
-                태스크 ({amrTasks.length}건)
-              </SectionTitle>
-              <div style={{ marginTop: 8 }}>
-                {amrTasks.length === 0 ? (
-                  <div
-                    style={{
-                      padding: '16px 0',
+            {/* ── 접을 수 있는 상세 섹션들 ── */}
+            <Collapse
+              defaultActiveKey={['tasks']}
+              size="small"
+              style={{ background: 'transparent' }}
+              items={[
+                {
+                  key: 'info',
+                  label: (
+                    <div style={iconTextRow}>
+                      <Info size={14} style={{ flexShrink: 0 }} />
+                      <span style={{ fontWeight: 600 }}>상세 정보</span>
+                    </div>
+                  ),
+                  children: (
+                    <Descriptions size="small" column={2} bordered>
+                      <Descriptions.Item label="AMR ID">{detailAmr.amr_id}</Descriptions.Item>
+                      <Descriptions.Item label="IP">{detailAmr.ip || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="각도">
+                        {detailAmr.deg != null ? `${detailAmr.deg.toFixed(1)}°` : '-'}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="맵">{detailAmr.map || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="마지막 수신" span={2}>
+                        {detailAmr.timestamp
+                          ? new Date(detailAmr.timestamp).toLocaleString('ko-KR')
+                          : '-'}
+                      </Descriptions.Item>
+                    </Descriptions>
+                  ),
+                },
+                {
+                  key: 'tasks',
+                  label: (
+                    <div style={{ ...iconTextRow, justifyContent: 'space-between', width: '100%' }}>
+                      <div style={iconTextRow}>
+                        <Activity size={14} style={{ flexShrink: 0 }} />
+                        <span style={{ fontWeight: 600 }}>태스크</span>
+                      </div>
+                      <Badge
+                        count={amrTasks.filter((t) => t.task_status === 'RUNNING').length}
+                        size="small"
+                        style={{ marginRight: 4 }}
+                      />
+                    </div>
+                  ),
+                  children: amrTasks.length === 0 ? (
+                    <div style={{
+                      padding: '20px 0',
                       textAlign: 'center',
                       color: token.colorTextSecondary,
                       fontSize: 13,
-                      background: token.colorBgLayout,
-                      borderRadius: token.borderRadius,
-                    }}
-                  >
-                    할당된 태스크가 없습니다
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {amrTasks.map((task) => (
-                      <div
-                        key={task.task_id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '8px 12px',
-                          background: token.colorBgLayout,
-                          borderRadius: token.borderRadius,
-                          fontSize: 13,
-                        }}
-                      >
-                        <div style={{ ...iconTextRow, gap: 8 }}>
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            #{task.task_id}
-                          </Text>
-                          <Text>{task.task_type || '-'}</Text>
-                          <Tag
-                            color={taskStatusColor(task.task_status)}
-                            style={{ fontSize: 11, margin: 0 }}
-                          >
-                            {task.task_status}
-                          </Tag>
-                        </div>
-                        <div style={{ ...iconTextRow, gap: 6 }}>
-                          {task.error_code && (
-                            <Tag color="red" style={{ fontSize: 10, margin: 0 }}>
-                              {task.error_code}
+                    }}>
+                      할당된 태스크가 없습니다
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {amrTasks.map((task) => (
+                        <div
+                          key={task.task_id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '6px 10px',
+                            background: task.task_status === 'RUNNING' ? `${token.colorPrimaryBg}` : token.colorBgLayout,
+                            borderRadius: token.borderRadius,
+                            fontSize: 12,
+                            borderLeft: task.task_status === 'RUNNING' ? `3px solid ${token.colorPrimary}` : '3px solid transparent',
+                          }}
+                        >
+                          <div style={{ ...iconTextRow, gap: 6 }}>
+                            <Text type="secondary" style={{ fontSize: 11, fontFamily: 'monospace' }}>
+                              #{task.task_id}
+                            </Text>
+                            <Tag
+                              color={task.task_type === 'ARM' ? 'purple' : 'cyan'}
+                              style={{ fontSize: 10, margin: 0, lineHeight: '16px', padding: '0 4px' }}
+                            >
+                              {task.task_type || '-'}
                             </Tag>
-                          )}
-                          <Text type="secondary" style={{ fontSize: 11 }}>
-                            <span style={iconTextRow}>
-                              <Clock size={10} style={{ flexShrink: 0 }} />
-                              {task.created_at
-                                ? new Date(task.created_at).toLocaleString('ko-KR', {
-                                    month: '2-digit',
-                                    day: '2-digit',
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })
-                                : '-'}
-                            </span>
+                            <Tag
+                              color={taskStatusColor(task.task_status)}
+                              style={{ fontSize: 10, margin: 0, lineHeight: '16px', padding: '0 4px' }}
+                            >
+                              {task.task_status}
+                            </Tag>
+                            {task.error_code && (
+                              <Text type="danger" style={{ fontSize: 10 }}>{task.error_code}</Text>
+                            )}
+                          </div>
+                          <Text type="secondary" style={{ fontSize: 10, flexShrink: 0 }}>
+                            {task.created_at
+                              ? new Date(task.created_at).toLocaleString('ko-KR', {
+                                  month: '2-digit',
+                                  day: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : '-'}
                           </Text>
                         </div>
+                      ))}
+                    </div>
+                  ),
+                },
+                {
+                  key: 'arm',
+                  label: (
+                    <div style={{ ...iconTextRow, justifyContent: 'space-between', width: '100%' }}>
+                      <div style={iconTextRow}>
+                        <Bot size={14} style={{ flexShrink: 0 }} />
+                        <span style={{ fontWeight: 600 }}>로봇 팔 (Doosan)</span>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Doosan 로봇 팔 상태 */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <SectionTitle icon={<Bot size={14} style={{ flexShrink: 0 }} />}>
-                  로봇 팔 (Doosan)
-                </SectionTitle>
-                {armStateLoading && (
-                  <Text type="secondary" style={{ fontSize: 11 }}>갱신 중...</Text>
-                )}
-              </div>
-              <div style={{ marginTop: 8 }}>
-                {armState ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {/* 상태 태그 행 */}
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <Tag color={
-                        armState.TASK_STATUS === '0' || armState.TASK_STATUS === 0
-                          ? 'green' : 'blue'
-                      }>
-                        TASK: {armState.TASK_STATUS === '0' || armState.TASK_STATUS === 0 ? '유휴' : '작업중'}
-                      </Tag>
-                      <Tag color={
-                        armState.ROBOT_ERROR && armState.ROBOT_ERROR !== '0' && armState.ROBOT_ERROR !== 0
-                          ? 'red' : 'green'
-                      }>
-                        ROBOT: {armState.ROBOT_STATUS ?? '-'}
-                      </Tag>
-                      {armState.ROBOT_ERROR && armState.ROBOT_ERROR !== '0' && armState.ROBOT_ERROR !== 0 && (
-                        <Tag color="red">ERR: {armState.ROBOT_ERROR}</Tag>
-                      )}
-                      {armState.VISION_ERROR && armState.VISION_ERROR !== '0' && armState.VISION_ERROR !== 0 && (
-                        <Tag color="orange">VISION ERR: {armState.VISION_ERROR}</Tag>
-                      )}
-                      {(armState.ROBOT_CMD_FROM || armState.ROBOT_CMD_TO) && (
-                        <Tag>
-                          {armState.ROBOT_CMD_FROM ?? '?'} → {armState.ROBOT_CMD_TO ?? '?'}
-                        </Tag>
+                      {armStateLoading && (
+                        <Spin size="small" style={{ marginRight: 4 }} />
                       )}
                     </div>
-
-                    {/* 6축 관절 데이터 그리드 */}
-                    {(() => {
-                      const joints = [1, 2, 3, 4, 5, 6];
-                      const cellStyle = {
-                        padding: '4px 6px',
-                        textAlign: 'center',
-                        fontSize: 11,
-                        borderBottom: `1px solid ${token.colorBorderSecondary}`,
-                      };
-                      const headerStyle = {
-                        ...cellStyle,
-                        fontWeight: 600,
-                        background: token.colorBgLayout,
-                        color: token.colorTextSecondary,
-                      };
-                      const tempColor = (v) => {
-                        const n = Number(v);
-                        if (isNaN(n)) return token.colorText;
-                        if (n >= 50) return '#ff4d4f';
-                        if (n >= 40) return '#faad14';
-                        return '#52c41a';
-                      };
-                      const fmtNum = (v) => {
-                        const n = Number(v);
-                        return isNaN(n) ? '-' : n.toFixed(1);
-                      };
-
-                      return (
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'auto repeat(6, 1fr)',
-                          border: `1px solid ${token.colorBorderSecondary}`,
-                          borderRadius: token.borderRadius,
-                          overflow: 'hidden',
-                        }}>
-                          {/* 헤더 */}
-                          <div style={headerStyle} />
-                          {joints.map((j) => (
-                            <div key={`h-${j}`} style={headerStyle}>J{j}</div>
-                          ))}
-
-                          {/* 온도 */}
-                          <div style={headerStyle}>온도 (°C)</div>
-                          {joints.map((j) => {
-                            const v = armState[`JOINT_MOTOR_TEMPERATURE_${j}`];
-                            return (
-                              <div key={`t-${j}`} style={{ ...cellStyle, color: tempColor(v), fontWeight: 600 }}>
-                                {fmtNum(v)}
+                  ),
+                  children: armState ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <Tag color={
+                          armState.TASK_STATUS === '0' || armState.TASK_STATUS === 0
+                            ? 'green' : 'blue'
+                        }>
+                          {armState.TASK_STATUS === '0' || armState.TASK_STATUS === 0 ? 'READY' : 'BUSY'}
+                        </Tag>
+                        <Tag color={
+                          armState.ROBOT_ERROR && armState.ROBOT_ERROR !== '0' && armState.ROBOT_ERROR !== 0
+                            ? 'red' : 'green'
+                        }>
+                          ROBOT: {armState.ROBOT_STATUS ?? '-'}
+                        </Tag>
+                        {armState.ROBOT_ERROR && armState.ROBOT_ERROR !== '0' && armState.ROBOT_ERROR !== 0 && (
+                          <Tag color="red">ERR: {armState.ROBOT_ERROR}</Tag>
+                        )}
+                        {armState.VISION_ERROR && armState.VISION_ERROR !== '0' && armState.VISION_ERROR !== 0 && (
+                          <Tag color="orange">VISION: {armState.VISION_ERROR}</Tag>
+                        )}
+                        {(armState.ROBOT_CMD_FROM || armState.ROBOT_CMD_TO) && (
+                          <Tag>{armState.ROBOT_CMD_FROM ?? '?'} → {armState.ROBOT_CMD_TO ?? '?'}</Tag>
+                        )}
+                      </div>
+                      {(() => {
+                        const joints = [1, 2, 3, 4, 5, 6];
+                        const cellStyle = {
+                          padding: '3px 4px',
+                          textAlign: 'center',
+                          fontSize: 11,
+                          borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                        };
+                        const headerStyle = {
+                          ...cellStyle,
+                          fontWeight: 600,
+                          background: token.colorBgLayout,
+                          color: token.colorTextSecondary,
+                        };
+                        const tempColor = (v) => {
+                          const n = Number(v);
+                          if (isNaN(n)) return token.colorText;
+                          if (n >= 50) return '#ff4d4f';
+                          if (n >= 40) return '#faad14';
+                          return '#52c41a';
+                        };
+                        const fmtNum = (v) => {
+                          const n = Number(v);
+                          return isNaN(n) ? '-' : n.toFixed(1);
+                        };
+                        return (
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'auto repeat(6, 1fr)',
+                            border: `1px solid ${token.colorBorderSecondary}`,
+                            borderRadius: token.borderRadius,
+                            overflow: 'hidden',
+                          }}>
+                            <div style={headerStyle} />
+                            {joints.map((j) => (
+                              <div key={`h-${j}`} style={headerStyle}>J{j}</div>
+                            ))}
+                            <div style={headerStyle}>온도</div>
+                            {joints.map((j) => {
+                              const v = armState[`JOINT_MOTOR_TEMPERATURE_${j}`];
+                              return (
+                                <div key={`t-${j}`} style={{ ...cellStyle, color: tempColor(v), fontWeight: 600 }}>
+                                  {fmtNum(v)}
+                                </div>
+                              );
+                            })}
+                            <div style={headerStyle}>위치</div>
+                            {joints.map((j) => (
+                              <div key={`p-${j}`} style={cellStyle}>{fmtNum(armState[`JOINT_POSITION_${j}`])}</div>
+                            ))}
+                            <div style={headerStyle}>토크</div>
+                            {joints.map((j) => (
+                              <div key={`q-${j}`} style={cellStyle}>{fmtNum(armState[`JOINT_TORQUE_${j}`])}</div>
+                            ))}
+                            <div style={{ ...headerStyle, borderBottom: 'none' }}>전류</div>
+                            {joints.map((j) => (
+                              <div key={`c-${j}`} style={{ ...cellStyle, borderBottom: 'none' }}>
+                                {fmtNum(armState[`JOINT_MOTOR_CURRENT_${j}`])}
                               </div>
-                            );
-                          })}
-
-                          {/* 위치 */}
-                          <div style={headerStyle}>위치 (°)</div>
-                          {joints.map((j) => (
-                            <div key={`p-${j}`} style={cellStyle}>
-                              {fmtNum(armState[`JOINT_POSITION_${j}`])}
-                            </div>
-                          ))}
-
-                          {/* 토크 */}
-                          <div style={headerStyle}>토크 (Nm)</div>
-                          {joints.map((j) => (
-                            <div key={`q-${j}`} style={cellStyle}>
-                              {fmtNum(armState[`JOINT_TORQUE_${j}`])}
-                            </div>
-                          ))}
-
-                          {/* 전류 */}
-                          <div style={{ ...headerStyle, borderBottom: 'none' }}>전류 (A)</div>
-                          {joints.map((j) => (
-                            <div key={`c-${j}`} style={{ ...cellStyle, borderBottom: 'none' }}>
-                              {fmtNum(armState[`JOINT_MOTOR_CURRENT_${j}`])}
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                ) : (
-                  <div
-                    style={{
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div style={{
                       padding: '16px 0',
                       textAlign: 'center',
                       color: token.colorTextSecondary,
                       fontSize: 13,
-                      background: token.colorBgLayout,
-                      borderRadius: token.borderRadius,
-                    }}
-                  >
-                    로봇 팔 상태를 가져올 수 없습니다
-                  </div>
-                )}
-              </div>
-            </div>
+                    }}>
+                      로봇 팔 상태를 가져올 수 없습니다
+                    </div>
+                  ),
+                },
+              ]}
+            />
           </div>
         )}
       </Modal>
