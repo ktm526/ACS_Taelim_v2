@@ -29,6 +29,11 @@ const lastTimeValue = new Map();    // amr_name → json.time
 const lastTimeUpdate = new Map();   // amr_name → Date.now()
 const connectedState = new Map();   // ip → boolean (연결 상태 변화 추적용)
 
+// ─── 유예 에러 (일시적 에러코드 → 일정 시간 후 ERROR 처리) ──
+const DEFERRED_ERROR_CODES = new Set(['052200']);
+const DEFERRED_ERROR_TIMEOUT = 30000; // 30초
+const deferredErrorStart = new Map(); // amr_name → Date.now() (유예 시작 시각)
+
 // ─────────────────────────────────────────────
 //  상태 매핑 유틸
 // ─────────────────────────────────────────────
@@ -164,6 +169,37 @@ function handlePush(sock, ip) {
             : null;
 
       let statusStr = mapTaskStatus(tsRaw, json);
+
+      // ── 유예 에러 처리 (052200 등 일시적 에러) ──
+      // 에러가 유예 대상 코드만으로 구성되면 30초간 ERROR를 보류
+      if (statusStr === 'ERROR') {
+        const errCodes = (json.errors || []).map(
+          (e) => String(e.code ?? e.error_code ?? '')
+        );
+        const allDeferred = errCodes.length > 0 && errCodes.every((c) => DEFERRED_ERROR_CODES.has(c));
+
+        if (allDeferred) {
+          const started = deferredErrorStart.get(name);
+          if (!started) {
+            deferredErrorStart.set(name, Date.now());
+            console.log(`[AMR-Monitor] ${name}: 유예 에러 감지 (${errCodes.join(',')}) → 30초 대기 시작`);
+            statusStr = 'MOVING';
+          } else if (Date.now() - started < DEFERRED_ERROR_TIMEOUT) {
+            statusStr = 'MOVING';
+          } else {
+            console.log(`[AMR-Monitor] ${name}: 유예 에러 30초 초과 → ERROR 처리`);
+            deferredErrorStart.delete(name);
+          }
+        } else {
+          deferredErrorStart.delete(name);
+        }
+      } else {
+        // 에러가 사라졌으면 유예 타이머 해제
+        if (deferredErrorStart.has(name)) {
+          console.log(`[AMR-Monitor] ${name}: 유예 에러 해소 → 타이머 해제`);
+          deferredErrorStart.delete(name);
+        }
+      }
 
       // ── 태스크 상태 자동 관리 ──
       // AMR이 RUNNING 태스크를 가지고 있을 때:
