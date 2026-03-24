@@ -113,6 +113,7 @@ function buildArmInfo(doosanState) {
     arm_joint6_torque: toReal(s.JOINT_TORQUE_6),
     arm_status: isBusy ? 'BUSY' : 'READY',
     arm_error_code: parseInt(s.ROBOT_ERROR, 10) || 0,
+    arm_vision_error_code: parseInt(s.VISION_ERROR, 10) || 0,
     arm_stop_code: 0,
   }];
 }
