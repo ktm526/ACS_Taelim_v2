@@ -31,7 +31,7 @@ const lastTimeUpdate = new Map();   // amr_name → Date.now()
 const connectedState = new Map();   // ip → boolean (연결 상태 변화 추적용)
 
 // ─── 유예 에러 (일시적 에러코드 → 일정 시간 후 ERROR 처리) ──
-const DEFERRED_ERROR_CODES = new Set(['052200']);
+const DEFERRED_ERROR_CODES = new Set(['52200']);
 const DEFERRED_ERROR_TIMEOUT = 30000; // 30초
 const deferredErrorStart = new Map(); // amr_name → Date.now() (유예 시작 시각)
 
