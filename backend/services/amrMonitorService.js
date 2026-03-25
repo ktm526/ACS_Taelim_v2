@@ -15,6 +15,7 @@ const Amr = require('../model/Amr');
 const Task = require('../model/Task');
 const { sendTaskResult } = require('./mesStatusService');
 const { writeLog } = require('./logService');
+const { sendCancelNav } = require('./navService');
 
 // ─── 설정 ────────────────────────────────────
 const PUSH_PORT = Number(process.env.AMR_PUSH_PORT || 19301);
@@ -187,8 +188,14 @@ function handlePush(sock, ip) {
           } else if (Date.now() - started < DEFERRED_ERROR_TIMEOUT) {
             statusStr = 'MOVING';
           } else {
-            console.log(`[AMR-Monitor] ${name}: 유예 에러 30초 초과 → ERROR 처리`);
+            console.log(`[AMR-Monitor] ${name}: 유예 에러 30초 초과 → ERROR 처리 + NAV 취소`);
             deferredErrorStart.delete(name);
+            // 네비게이션 취소 명령 전송
+            sendCancelNav(ip).then(() => {
+              console.log(`[AMR-Monitor] ${name}: NAV 취소 명령 전송 완료`);
+            }).catch((e) => {
+              console.warn(`[AMR-Monitor] ${name}: NAV 취소 실패 (무시): ${e.message}`);
+            });
           }
         } else {
           deferredErrorStart.delete(name);
