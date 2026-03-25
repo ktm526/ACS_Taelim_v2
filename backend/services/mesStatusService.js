@@ -119,21 +119,11 @@ function buildArmInfo(doosanState) {
 }
 
 async function buildPayload() {
-  // armService는 순환 의존 방지를 위해 lazy require
-  const { getDoosanArmState } = require('./armService');
+  const { getCachedArmState } = require('./armService');
 
   const amrs = await Amr.findAll();
 
-  // 모든 AMR에 대해 Doosan 상태를 병렬 조회
-  const armStates = await Promise.all(
-    amrs.map((a) =>
-      a.ip
-        ? getDoosanArmState(a.ip).catch(() => null)
-        : Promise.resolve(null)
-    )
-  );
-
-  const amrList = amrs.map((a, i) => ({
+  const amrList = amrs.map((a) => ({
     amr_id: a.amr_id,
     amr_name: a.amr_name,
     map: a.map || '',
@@ -147,7 +137,7 @@ async function buildPayload() {
     task_id: a.task_id || 0,
     error_code: a.error_code ? parseInt(a.error_code, 10) || 0 : 0,
     stop_code: a.stop_code ? parseInt(a.stop_code, 10) || 0 : 0,
-    arm_info: buildArmInfo(armStates[i]),
+    arm_info: buildArmInfo(a.ip ? getCachedArmState(a.ip) : null),
   }));
 
   return {

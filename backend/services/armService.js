@@ -303,6 +303,55 @@ async function checkDoosanTaskStatus(ip) {
 }
 
 // ─────────────────────────────────────────────
+//  ARM 상태 캐시 (2초 주기 갱신)
+// ─────────────────────────────────────────────
+
+const ARM_CACHE_INTERVAL = 2000;
+const armStateCache = new Map(); // ip → { data, updatedAt }
+let cacheTimer = null;
+let cacheRunning = false;
+
+async function refreshArmCache() {
+  if (cacheRunning) return;
+  cacheRunning = true;
+  try {
+    const rows = await Amr.findAll({
+      where: { ip: { [require('sequelize').Op.not]: null, [require('sequelize').Op.ne]: '' } },
+      attributes: ['ip'],
+      raw: true,
+    });
+    const results = await Promise.all(
+      rows.map(({ ip }) => getDoosanArmState(ip).then(
+        (data) => ({ ip, data }),
+        () => ({ ip, data: null }),
+      ))
+    );
+    const now = Date.now();
+    for (const { ip, data } of results) {
+      if (data) {
+        armStateCache.set(ip, { data, updatedAt: now });
+      }
+    }
+  } catch (e) {
+    console.warn('[ARM-Cache] 갱신 오류:', e.message);
+  } finally {
+    cacheRunning = false;
+  }
+}
+
+function startArmStateCache() {
+  if (cacheTimer) return;
+  refreshArmCache();
+  cacheTimer = setInterval(refreshArmCache, ARM_CACHE_INTERVAL);
+  console.log(`🦾 ARM State Cache started (${ARM_CACHE_INTERVAL}ms)`);
+}
+
+function getCachedArmState(ip) {
+  const entry = armStateCache.get(ip);
+  return entry ? entry.data : null;
+}
+
+// ─────────────────────────────────────────────
 //  외부 노출
 // ─────────────────────────────────────────────
 
@@ -314,6 +363,8 @@ module.exports = {
   activeArmTasks,
   startArmMonitor,
   getDoosanArmState,
+  getCachedArmState,
+  startArmStateCache,
   checkDoosanTaskStatus,
   MANI_WORK_DO_ID,
 };

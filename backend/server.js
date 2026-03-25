@@ -5,7 +5,7 @@ const { startMonitoring } = require('./services/amrMonitorService');
 const { initDefaults: initSettings } = require('./services/settingService');
 const { initDefaultAdmin } = require('./services/userService');
 const { startTaskCleanup } = require('./services/taskService');
-const { startArmMonitor } = require('./services/armService');
+const { startArmMonitor, startArmStateCache } = require('./services/armService');
 const { startMesStatus } = require('./services/mesStatusService');
 const { startLogCleanup } = require('./services/logService');
 
@@ -36,6 +36,9 @@ sequelize
 
     // 로봇 팔 DI 모니터 시작
     startArmMonitor();
+
+    // 로봇 팔 상태 캐시 시작 (2초 주기)
+    startArmStateCache();
 
     // MES 상태 전송 서비스 시작 (1Hz)
     startMesStatus();

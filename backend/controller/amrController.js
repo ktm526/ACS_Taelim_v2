@@ -1,7 +1,7 @@
 const amrService = require('../services/amrService');
 const { reconnectAmr, sockets, lastRecTime } = require('../services/amrMonitorService');
 const { sendGotoNav } = require('../services/navService');
-const { getDoosanArmState } = require('../services/armService');
+const { getDoosanArmState, getCachedArmState } = require('../services/armService');
 
 // GET /api/amrs
 const getAllAmrs = async (req, res, next) => {
@@ -131,14 +131,17 @@ const navigate = async (req, res, next) => {
   }
 };
 
-// GET /api/amrs/:id/arm-state — Doosan 로봇 팔 상태 조회
+// GET /api/amrs/:id/arm-state — Doosan 로봇 팔 상태 조회 (캐시 우선)
 const getArmState = async (req, res, next) => {
   try {
     const amr = await amrService.getAmrById(req.params.id);
     if (!amr) return res.status(404).json({ message: 'AMR not found' });
     if (!amr.ip) return res.status(400).json({ message: 'AMR IP가 설정되지 않았습니다' });
 
-    const armState = await getDoosanArmState(amr.ip);
+    let armState = getCachedArmState(amr.ip);
+    if (!armState) {
+      armState = await getDoosanArmState(amr.ip);
+    }
     if (!armState) {
       return res.status(503).json({ message: '로봇 팔 상태 조회 실패' });
     }
