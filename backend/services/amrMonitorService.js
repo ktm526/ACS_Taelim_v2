@@ -35,6 +35,9 @@ const DEFERRED_ERROR_CODES = new Set(['52200']);
 const DEFERRED_ERROR_TIMEOUT = 30000; // 30초
 const deferredErrorStart = new Map(); // amr_name → Date.now() (유예 시작 시각)
 
+// ─── 비상정지 해제 추적 ──
+const prevEmergencyState = new Map(); // amr_name → boolean
+
 // ─────────────────────────────────────────────
 //  상태 매핑 유틸
 // ─────────────────────────────────────────────
@@ -186,6 +189,20 @@ function handlePush(sock, ip) {
             : null;
 
       let statusStr = mapTaskStatus(tsRaw, json);
+
+      // ── 비상정지 해제 감지 → NAV 취소 ──
+      const wasEmergency = prevEmergencyState.get(name) === true;
+      const isEmergencyNow = json.emergency === true;
+      prevEmergencyState.set(name, isEmergencyNow);
+
+      if (wasEmergency && !isEmergencyNow) {
+        console.log(`[AMR-Monitor] ${name}: 비상정지 해제 감지 → NAV 취소 명령 전송`);
+        sendCancelNav(ip).then(() => {
+          console.log(`[AMR-Monitor] ${name}: 비상정지 해제 후 NAV 취소 완료`);
+        }).catch((e) => {
+          console.warn(`[AMR-Monitor] ${name}: 비상정지 해제 후 NAV 취소 실패 (무시): ${e.message}`);
+        });
+      }
 
       // ── 유예 에러 처리 (052200 등 일시적 에러) ──
       // 에러가 유예 대상 코드만으로 구성되면 30초간 ERROR를 보류
