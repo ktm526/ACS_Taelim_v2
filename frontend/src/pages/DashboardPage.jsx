@@ -700,40 +700,87 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {/* ── 에러/정지 배너 (있을 때만) ── */}
-            {(detailErrorInfo.errors.length > 0 || detailErrorInfo.stopCode) && (
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 6,
-                padding: '10px 12px',
-                background: '#fff2f0',
-                border: '1px solid #ffccc7',
-                borderRadius: token.borderRadiusLG,
-                fontSize: 13,
-              }}>
-                {detailErrorInfo.stopCode && (
-                  <div style={{ ...iconTextRow, gap: 8 }}>
-                    <AlertTriangle size={14} style={{ color: '#fa8c16', flexShrink: 0 }} />
-                    <span>정지 코드: <Text type="warning" strong>{detailErrorInfo.stopCode}</Text></span>
+            {/* ── 에러/정지 상태 테이블 (항상 표시) ── */}
+            {(() => {
+              const hasErrors = detailErrorInfo.errors.length > 0;
+              const hasStop = !!detailErrorInfo.stopCode;
+              const isNormal = !hasErrors && !hasStop;
+              const borderColor = isNormal ? token.colorBorderSecondary : '#ffccc7';
+              const bg = isNormal ? token.colorBgLayout : '#fff2f0';
+
+              const thStyle = {
+                padding: '6px 10px',
+                fontSize: 11,
+                fontWeight: 600,
+                color: token.colorTextSecondary,
+                background: isNormal ? token.colorBgContainer : '#fff7f5',
+                borderBottom: `1px solid ${borderColor}`,
+                textAlign: 'left',
+                whiteSpace: 'nowrap',
+              };
+              const tdStyle = {
+                padding: '6px 10px',
+                fontSize: 12,
+                borderBottom: `1px solid ${borderColor}`,
+                wordBreak: 'break-all',
+              };
+
+              return (
+                <div style={{
+                  border: `1px solid ${borderColor}`,
+                  borderRadius: token.borderRadiusLG,
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    ...iconTextRow,
+                    gap: 6,
+                    padding: '6px 10px',
+                    background: bg,
+                    borderBottom: `1px solid ${borderColor}`,
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}>
+                    <AlertTriangle size={13} style={{ color: isNormal ? token.colorTextSecondary : '#ff4d4f', flexShrink: 0 }} />
+                    <span style={{ color: isNormal ? token.colorTextSecondary : '#ff4d4f' }}>
+                      에러 / 정지 상태
+                    </span>
+                    {hasStop && (
+                      <Tag color="warning" style={{ margin: 0, marginLeft: 'auto', fontSize: 11, lineHeight: '18px' }}>
+                        {detailErrorInfo.stopCode}
+                      </Tag>
+                    )}
                   </div>
-                )}
-                {detailErrorInfo.errors.map((err, idx) => (
-                  <div key={idx} style={{ ...iconTextRow, gap: 8, alignItems: 'flex-start' }}>
-                    <AlertTriangle size={14} style={{ color: '#ff4d4f', flexShrink: 0, marginTop: 2 }} />
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <span>
-                        <Text type="secondary" style={{ fontSize: 12 }}>코드</Text>{' '}
-                        <Text type="danger" strong>{err.code || '-'}</Text>
-                      </span>
-                      {err.message && (
-                        <Text type="danger" style={{ fontSize: 12 }}>{err.message}</Text>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...thStyle, width: 40 }}>#</th>
+                        <th style={{ ...thStyle, width: 100 }}>에러 코드</th>
+                        <th style={thStyle}>에러 메시지</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {hasErrors ? detailErrorInfo.errors.map((err, idx) => (
+                        <tr key={idx}>
+                          <td style={{ ...tdStyle, color: token.colorTextSecondary, textAlign: 'center' }}>{idx + 1}</td>
+                          <td style={tdStyle}>
+                            <Text type="danger" strong style={{ fontSize: 12 }}>{err.code || '-'}</Text>
+                          </td>
+                          <td style={tdStyle}>
+                            <Text style={{ fontSize: 12 }}>{err.message || '-'}</Text>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={3} style={{ ...tdStyle, textAlign: 'center', color: token.colorTextSecondary, borderBottom: 'none', padding: '12px 10px' }}>
+                            에러 없음
+                          </td>
+                        </tr>
                       )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
 
             {/* ── 접을 수 있는 상세 섹션들 ── */}
             <Collapse
