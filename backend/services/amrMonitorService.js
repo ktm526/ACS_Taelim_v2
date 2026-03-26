@@ -19,9 +19,9 @@ const { sendCancelNav } = require('./navService');
 
 // ─── 설정 ────────────────────────────────────
 const PUSH_PORT = Number(process.env.AMR_PUSH_PORT || 19301);
-const RECONNECT_INTERVAL = 2000;   // 재연결 시도 주기 (ms)
-const STALE_TIMEOUT = 5000;        // 수신 없음 → 연결 끊김 판정 (ms)
-const TIME_STALE_TIMEOUT = 10000;  // AMR time 값 변화 없음 → 재연결 (ms)
+const RECONNECT_INTERVAL = 1000;   // 재연결 시도 주기 (ms)
+const STALE_TIMEOUT = 3000;        // 수신 없음 → 연결 끊김 판정 (ms)
+const TIME_STALE_TIMEOUT = 5000;  // AMR time 값 변화 없음 → 재연결 (ms)
 
 // ─── 런타임 상태 ──────────────────────────────
 const sockets = new Map();          // ip → socket

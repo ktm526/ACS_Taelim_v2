@@ -78,7 +78,7 @@ function buildArmInfo(doosanState) {
 
   const s = doosanState;
   const ts = s.TASK_STATUS;
-  const isBusy = ts !== '0' && ts !== 0;
+  const isBusy = (Number(ts) != 0 && Number(ts) != 20);
 
   return [{
     arm_joint1_pos: toReal(s.JOINT_POSITION_1),
@@ -105,6 +105,7 @@ function buildArmInfo(doosanState) {
     arm_joint4_temp: toReal(s.JOINT_MOTOR_TEMPERATURE_4),
     arm_joint5_temp: toReal(s.JOINT_MOTOR_TEMPERATURE_5),
     arm_joint6_temp: toReal(s.JOINT_MOTOR_TEMPERATURE_6),
+
     arm_joint1_torque: toReal(s.JOINT_TORQUE_1),
     arm_joint2_torque: toReal(s.JOINT_TORQUE_2),
     arm_joint3_torque: toReal(s.JOINT_TORQUE_3),
@@ -140,11 +141,23 @@ async function buildPayload() {
     arm_info: buildArmInfo(a.ip ? getCachedArmState(a.ip) : null),
   }));
 
+  // DebugBuildedPayload(amrList[0]);
+  // DebugBuildedPayload(amrList[1]);
+
   return {
     request_time: new Date().toISOString(),
     amr_count: amrList.length,
     amr_list: amrList,
   };
+}
+
+function DebugBuildedPayload(obj)
+{
+  console.log(`
+    amr id : ${obj.amr_id}, amr name : ${obj.amr_name}, amr status : ${obj.status}, amr current : ${obj.current_station_id}, amr dest : ${obj.dest_station_id},
+    task id : ${obj.task_id}, error code : ${obj.error_code}, stop code : ${obj.stop_code},
+    arm_info : { arm status: ${obj.arm_info[0].arm_status}, arm error code : ${obj.arm_info[0].error_code}, arm vision code : ${obj.arm_info[0].arm_vision_error_code}, arm stop code : ${obj.arm_info[0].arm_stop_code}
+    `);
 }
 
 // ─────────────────────────────────────────────
