@@ -120,8 +120,8 @@ const SectionTitle = ({ icon, children, color }) => (
   </div>
 );
 
-const readAmrErrorInfo = (amr) => {
-  if (!amr) return { errorCode: null, stopCode: null, errorMessage: null };
+const parseAmrErrors = (amr) => {
+  if (!amr) return { errors: [], stopCode: null };
 
   let parsedAdditional = null;
   try {
@@ -133,26 +133,17 @@ const readAmrErrorInfo = (amr) => {
     parsedAdditional = null;
   }
 
-  const errors = Array.isArray(parsedAdditional?.errors) ? parsedAdditional.errors : [];
-  const firstError = errors[0] || null;
+  const rawErrors = Array.isArray(parsedAdditional?.errors) ? parsedAdditional.errors : [];
 
-  const errorCode =
-    amr.error_code ||
-    (firstError ? String(firstError.code ?? firstError.error_code ?? '') : null) ||
-    null;
-  const errorMessage =
-    parsedAdditional?.error_message ||
-    firstError?.message ||
-    firstError?.msg ||
-    firstError?.error_message ||
-    firstError?.err_msg ||
-    firstError?.description ||
-    null;
+  const errors = rawErrors.map((e) => ({
+    code: String(e.code ?? e.error_code ?? ''),
+    message:
+      e.message ?? e.msg ?? e.error_message ?? e.err_msg ?? e.description ?? null,
+  }));
 
   return {
-    errorCode,
+    errors,
     stopCode: amr.stop_code || null,
-    errorMessage,
   };
 };
 
@@ -245,7 +236,7 @@ export default function DashboardPage() {
     if (!detailAmr) return [];
     return tasks.filter((t) => t.amr_name === detailAmr.amr_name);
   }, [detailAmr, tasks]);
-  const detailErrorInfo = useMemo(() => readAmrErrorInfo(detailAmr), [detailAmr]);
+  const detailErrorInfo = useMemo(() => parseAmrErrors(detailAmr), [detailAmr]);
 
   // AMR 추가
   const handleAddAmr = async () => {
@@ -709,31 +700,38 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {/* ── 에러 배너 (있을 때만) ── */}
-            {(detailErrorInfo.errorCode || detailErrorInfo.stopCode || detailErrorInfo.errorMessage) && (
+            {/* ── 에러/정지 배너 (있을 때만) ── */}
+            {(detailErrorInfo.errors.length > 0 || detailErrorInfo.stopCode) && (
               <div style={{
                 display: 'flex',
-                gap: 12,
-                padding: '8px 12px',
+                flexDirection: 'column',
+                gap: 6,
+                padding: '10px 12px',
                 background: '#fff2f0',
                 border: '1px solid #ffccc7',
                 borderRadius: token.borderRadiusLG,
                 fontSize: 13,
               }}>
-                <AlertTriangle size={16} style={{ color: '#ff4d4f', flexShrink: 0, marginTop: 1 }} />
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                  {detailErrorInfo.errorCode && (
-                    <span>에러 코드: <Text type="danger" strong>{detailErrorInfo.errorCode}</Text></span>
-                  )}
-                  {detailErrorInfo.stopCode && (
+                {detailErrorInfo.stopCode && (
+                  <div style={{ ...iconTextRow, gap: 8 }}>
+                    <AlertTriangle size={14} style={{ color: '#fa8c16', flexShrink: 0 }} />
                     <span>정지 코드: <Text type="warning" strong>{detailErrorInfo.stopCode}</Text></span>
-                  )}
-                  {detailErrorInfo.errorMessage && (
-                    <span>
-                      에러 메시지: <Text type="danger">{detailErrorInfo.errorMessage}</Text>
-                    </span>
-                  )}
-                </div>
+                  </div>
+                )}
+                {detailErrorInfo.errors.map((err, idx) => (
+                  <div key={idx} style={{ ...iconTextRow, gap: 8, alignItems: 'flex-start' }}>
+                    <AlertTriangle size={14} style={{ color: '#ff4d4f', flexShrink: 0, marginTop: 2 }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span>
+                        <Text type="secondary" style={{ fontSize: 12 }}>코드</Text>{' '}
+                        <Text type="danger" strong>{err.code || '-'}</Text>
+                      </span>
+                      {err.message && (
+                        <Text type="danger" style={{ fontSize: 12 }}>{err.message}</Text>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
