@@ -120,30 +120,28 @@ const SectionTitle = ({ icon, children, color }) => (
   </div>
 );
 
-const parseAmrErrors = (amr) => {
-  if (!amr) return { errors: [], stopCode: null };
+const parseAmrStatus = (amr) => {
+  if (!amr) return { errors: [], stopCode: null, taskStatusRaw: null };
 
-  let parsedAdditional = null;
+  let info = null;
   try {
-    parsedAdditional =
-      typeof amr.additional_info === 'string'
-        ? JSON.parse(amr.additional_info)
-        : amr.additional_info || null;
+    info = typeof amr.additional_info === 'string'
+      ? JSON.parse(amr.additional_info)
+      : amr.additional_info || null;
   } catch {
-    parsedAdditional = null;
+    info = null;
   }
 
-  const rawErrors = Array.isArray(parsedAdditional?.errors) ? parsedAdditional.errors : [];
-
+  const rawErrors = Array.isArray(info?.errors) ? info.errors : [];
   const errors = rawErrors.map((e) => ({
     code: String(e.code ?? e.error_code ?? ''),
-    message:
-      e.message ?? e.msg ?? e.error_message ?? e.err_msg ?? e.description ?? null,
+    message: e.message ?? e.msg ?? e.error_message ?? e.err_msg ?? e.description ?? null,
   }));
 
   return {
     errors,
     stopCode: amr.stop_code || null,
+    taskStatusRaw: info?.task_status_raw ?? null,
   };
 };
 
@@ -236,7 +234,7 @@ export default function DashboardPage() {
     if (!detailAmr) return [];
     return tasks.filter((t) => t.amr_name === detailAmr.amr_name);
   }, [detailAmr, tasks]);
-  const detailErrorInfo = useMemo(() => parseAmrErrors(detailAmr), [detailAmr]);
+  const detailErrorInfo = useMemo(() => parseAmrStatus(detailAmr), [detailAmr]);
 
   // AMR 추가
   const handleAddAmr = async () => {
@@ -702,76 +700,72 @@ export default function DashboardPage() {
 
             {/* ── 에러/정지 상태 테이블 (항상 표시) ── */}
             {(() => {
-              const hasErrors = detailErrorInfo.errors.length > 0;
-              const hasStop = !!detailErrorInfo.stopCode;
-              const isNormal = !hasErrors && !hasStop;
-              const borderColor = isNormal ? token.colorBorderSecondary : '#ffccc7';
-              const bg = isNormal ? token.colorBgLayout : '#fff2f0';
+              const { errors, stopCode, taskStatusRaw } = detailErrorInfo;
+              const hasIssue = errors.length > 0 || stopCode || [5, 6].includes(taskStatusRaw);
+              const accent = hasIssue ? '#ff4d4f' : token.colorTextQuaternary;
+              const border = hasIssue ? '#ffccc7' : token.colorBorderSecondary;
 
-              const thStyle = {
-                padding: '6px 10px',
+              const cell = {
+                padding: '5px 10px',
+                fontSize: 12,
+                borderBottom: `1px solid ${border}`,
+              };
+              const header = {
+                ...cell,
                 fontSize: 11,
                 fontWeight: 600,
                 color: token.colorTextSecondary,
-                background: isNormal ? token.colorBgContainer : '#fff7f5',
-                borderBottom: `1px solid ${borderColor}`,
-                textAlign: 'left',
+                background: hasIssue ? '#fff7f5' : token.colorBgLayout,
                 whiteSpace: 'nowrap',
-              };
-              const tdStyle = {
-                padding: '6px 10px',
-                fontSize: 12,
-                borderBottom: `1px solid ${borderColor}`,
-                wordBreak: 'break-all',
               };
 
               return (
-                <div style={{
-                  border: `1px solid ${borderColor}`,
-                  borderRadius: token.borderRadiusLG,
-                  overflow: 'hidden',
-                }}>
+                <div style={{ border: `1px solid ${border}`, borderRadius: token.borderRadiusLG, overflow: 'hidden' }}>
+                  {/* 헤더 */}
                   <div style={{
-                    ...iconTextRow,
-                    gap: 6,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '6px 10px',
-                    background: bg,
-                    borderBottom: `1px solid ${borderColor}`,
-                    fontSize: 12,
-                    fontWeight: 600,
+                    background: hasIssue ? '#fff2f0' : token.colorBgLayout,
+                    borderBottom: `1px solid ${border}`,
                   }}>
-                    <AlertTriangle size={13} style={{ color: isNormal ? token.colorTextSecondary : '#ff4d4f', flexShrink: 0 }} />
-                    <span style={{ color: isNormal ? token.colorTextSecondary : '#ff4d4f' }}>
+                    <div style={{ ...iconTextRow, gap: 6, fontSize: 12, fontWeight: 600, color: accent }}>
+                      <AlertTriangle size={13} style={{ flexShrink: 0 }} />
                       에러 / 정지 상태
-                    </span>
-                    {hasStop && (
-                      <Tag color="warning" style={{ margin: 0, marginLeft: 'auto', fontSize: 11, lineHeight: '18px' }}>
-                        {detailErrorInfo.stopCode}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      {stopCode && <Tag color="warning" style={{ margin: 0, fontSize: 11, lineHeight: '18px' }}>{stopCode}</Tag>}
+                      <Tag
+                        style={{ margin: 0, fontSize: 11, lineHeight: '18px', fontFamily: 'monospace' }}
+                        color={[5, 6].includes(taskStatusRaw) ? 'error' : 'default'}
+                      >
+                        task_status: {taskStatusRaw ?? '-'}
                       </Tag>
-                    )}
+                    </div>
                   </div>
+
+                  {/* 에러 테이블 */}
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
-                        <th style={{ ...thStyle, width: 40 }}>#</th>
-                        <th style={{ ...thStyle, width: 100 }}>에러 코드</th>
-                        <th style={thStyle}>에러 메시지</th>
+                        <th style={{ ...header, width: 36, textAlign: 'center' }}>#</th>
+                        <th style={{ ...header, width: 110 }}>에러 코드</th>
+                        <th style={header}>메시지</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {hasErrors ? detailErrorInfo.errors.map((err, idx) => (
-                        <tr key={idx}>
-                          <td style={{ ...tdStyle, color: token.colorTextSecondary, textAlign: 'center' }}>{idx + 1}</td>
-                          <td style={tdStyle}>
-                            <Text type="danger" strong style={{ fontSize: 12 }}>{err.code || '-'}</Text>
+                      {errors.length > 0 ? errors.map((err, i) => (
+                        <tr key={i} style={{ background: i % 2 === 1 ? (hasIssue ? '#fffafa' : token.colorBgLayout) : undefined }}>
+                          <td style={{ ...cell, textAlign: 'center', color: token.colorTextSecondary }}>{i + 1}</td>
+                          <td style={cell}>
+                            <Text type="danger" strong style={{ fontSize: 12, fontFamily: 'monospace' }}>{err.code || '-'}</Text>
                           </td>
-                          <td style={tdStyle}>
-                            <Text style={{ fontSize: 12 }}>{err.message || '-'}</Text>
+                          <td style={{ ...cell, wordBreak: 'break-word' }}>
+                            {err.message || <Text type="secondary">-</Text>}
                           </td>
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={3} style={{ ...tdStyle, textAlign: 'center', color: token.colorTextSecondary, borderBottom: 'none', padding: '12px 10px' }}>
+                          <td colSpan={3} style={{ ...cell, textAlign: 'center', color: token.colorTextSecondary, padding: '10px', borderBottom: 'none' }}>
                             에러 없음
                           </td>
                         </tr>
