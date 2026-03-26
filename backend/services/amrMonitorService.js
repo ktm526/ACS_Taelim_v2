@@ -52,7 +52,7 @@ function mapTaskStatus(tsRaw, json) {
   const hasErrors = Array.isArray(json.errors) && json.errors.length > 0;
 
   if (isEmergency) return 'E-STOP';
-  if (hasErrors || [5, 6].includes(tsRaw)) return 'ERROR';
+  if (hasErrors || tsRaw === 5) return 'ERROR';
   if (isStopped) return 'STOP';
   if (tsRaw === 2) return 'MOVING';
   if ([0, 1, 4].includes(tsRaw)) return 'IDLE';
