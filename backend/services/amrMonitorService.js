@@ -57,12 +57,28 @@ function mapTaskStatus(tsRaw, json) {
 }
 
 /**
+ * errors 배열에서 첫 번째 에러 상세 추출
+ */
+function extractErrorDetail(json) {
+  if (!Array.isArray(json.errors) || json.errors.length === 0) return null;
+  const first = json.errors[0];
+  const code = String(first.code ?? first.error_code ?? 'ERR');
+  const message =
+    first.message ??
+    first.msg ??
+    first.error_message ??
+    first.err_msg ??
+    first.description ??
+    null;
+  return { code, message };
+}
+
+/**
  * errors 배열에서 에러 코드 추출
  */
 function extractErrorCode(json) {
-  if (!Array.isArray(json.errors) || json.errors.length === 0) return null;
-  const first = json.errors[0];
-  return String(first.code ?? first.error_code ?? 'ERR');
+  const detail = extractErrorDetail(json);
+  return detail ? detail.code : null;
 }
 
 /**
@@ -300,7 +316,9 @@ function handlePush(sock, ip) {
         null;
 
       const currentMap = json.current_map || null;
-      const errorCode = extractErrorCode(json);
+      const errorDetail = extractErrorDetail(json);
+      const errorCode = errorDetail?.code || null;
+      const errorMessage = errorDetail?.message || null;
       const stopCode = extractStopCode(json);
 
       // ── 확장 정보 (additional_info) ──
@@ -335,6 +353,7 @@ function handlePush(sock, ip) {
         // 에러/경고
         errors: json.errors || [],
         warnings: json.warnings || [],
+        error_message: errorMessage,
 
         // DI/DO 센서
         di_sensors: json.DI || json.di || json.digital_inputs || [],

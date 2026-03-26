@@ -120,6 +120,42 @@ const SectionTitle = ({ icon, children, color }) => (
   </div>
 );
 
+const readAmrErrorInfo = (amr) => {
+  if (!amr) return { errorCode: null, stopCode: null, errorMessage: null };
+
+  let parsedAdditional = null;
+  try {
+    parsedAdditional =
+      typeof amr.additional_info === 'string'
+        ? JSON.parse(amr.additional_info)
+        : amr.additional_info || null;
+  } catch {
+    parsedAdditional = null;
+  }
+
+  const errors = Array.isArray(parsedAdditional?.errors) ? parsedAdditional.errors : [];
+  const firstError = errors[0] || null;
+
+  const errorCode =
+    amr.error_code ||
+    (firstError ? String(firstError.code ?? firstError.error_code ?? '') : null) ||
+    null;
+  const errorMessage =
+    parsedAdditional?.error_message ||
+    firstError?.message ||
+    firstError?.msg ||
+    firstError?.error_message ||
+    firstError?.err_msg ||
+    firstError?.description ||
+    null;
+
+  return {
+    errorCode,
+    stopCode: amr.stop_code || null,
+    errorMessage,
+  };
+};
+
 export default function DashboardPage() {
   const { token } = theme.useToken();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -209,6 +245,7 @@ export default function DashboardPage() {
     if (!detailAmr) return [];
     return tasks.filter((t) => t.amr_name === detailAmr.amr_name);
   }, [detailAmr, tasks]);
+  const detailErrorInfo = useMemo(() => readAmrErrorInfo(detailAmr), [detailAmr]);
 
   // AMR 추가
   const handleAddAmr = async () => {
@@ -673,7 +710,7 @@ export default function DashboardPage() {
             </div>
 
             {/* ── 에러 배너 (있을 때만) ── */}
-            {(detailAmr.error_code || detailAmr.stop_code) && (
+            {(detailErrorInfo.errorCode || detailErrorInfo.stopCode || detailErrorInfo.errorMessage) && (
               <div style={{
                 display: 'flex',
                 gap: 12,
@@ -684,12 +721,17 @@ export default function DashboardPage() {
                 fontSize: 13,
               }}>
                 <AlertTriangle size={16} style={{ color: '#ff4d4f', flexShrink: 0, marginTop: 1 }} />
-                <div style={{ display: 'flex', gap: 16 }}>
-                  {detailAmr.error_code && (
-                    <span>에러 코드: <Text type="danger" strong>{detailAmr.error_code}</Text></span>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                  {detailErrorInfo.errorCode && (
+                    <span>에러 코드: <Text type="danger" strong>{detailErrorInfo.errorCode}</Text></span>
                   )}
-                  {detailAmr.stop_code && (
-                    <span>정지 코드: <Text type="warning" strong>{detailAmr.stop_code}</Text></span>
+                  {detailErrorInfo.stopCode && (
+                    <span>정지 코드: <Text type="warning" strong>{detailErrorInfo.stopCode}</Text></span>
+                  )}
+                  {detailErrorInfo.errorMessage && (
+                    <span>
+                      에러 메시지: <Text type="danger">{detailErrorInfo.errorMessage}</Text>
+                    </span>
                   )}
                 </div>
               </div>
