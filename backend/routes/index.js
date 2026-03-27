@@ -11,6 +11,7 @@ const simAmrRoutes = require('./simAmrRoutes');
 const moveCommandRoutes = require('./moveCommandRoutes');
 const armCommandRoutes = require('./armCommandRoutes');
 const logRoutes = require('./logRoutes');
+const armMonitoringRoutes = require('./armMonitoringRoutes');
 
 router.use('/amrs', amrRoutes);
 router.use('/tasks', taskRoutes);
@@ -22,6 +23,7 @@ router.use('/sim-amrs', simAmrRoutes);
 router.use('/move_command', moveCommandRoutes);
 router.use('/arm_command', armCommandRoutes);
 router.use('/logs', logRoutes);
+router.use('/arm/monitor', armMonitoringRoutes);
 
 // 기본 API 상태 확인
 router.get('/', (req, res) => {

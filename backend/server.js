@@ -37,7 +37,7 @@ sequelize
     // 로봇 팔 DI 모니터 시작
     startArmMonitor();
 
-    // 로봇 팔 상태 캐시 시작 (2초 주기)
+    // 로봇 팔 상태 캐시 시작 (2{ startArmStatus }초 주기)
     startArmStateCache();
 
     // MES 상태 전송 서비스 시작 (1Hz)
