@@ -25,7 +25,7 @@ let lastMesBase = null; // 캐시된 MES 베이스 URL (http://ip:port)
 let settingCheckCount = 0;
 const SETTING_REFRESH_EVERY = 10; // 10번(10초)마다 설정 재조회
 let mesConnected = null; // MES 연결 상태 추적 (null=초기, true=연결, false=끊김)
-let movingArmInfo = null;
+let movingArmInfo = [];
 
 // ─────────────────────────────────────────────
 //  MES 베이스 URL 조회 (설정 테이블에서)
@@ -120,13 +120,18 @@ function buildArmInfo(doosanState) {
   }];
 }
 
-function MovingbuildArmInfo(doosanState)
+function MovingbuildArmInfo(doosanState, id)
 {
+  let idx = Number(id)-1;
   if(!doosanState) console.log('doosanstate is null');
-  let s = JSON.parse(doosanState);
-  console.log(typeof(s));
-  movingArmInfo = buildArmInfo(s);
-  console.log(movingArmInfo);
+  // console.log(doosanState);
+  // movingArmInfo = buildArmInfo(doosanState);
+  // console.log("movingArmInfo");
+  // console.log(movingArmInfo);
+  let temp = buildArmInfo(doosanState);
+  // console.log(temp);
+  movingArmInfo[idx] = temp;
+  //  console.log(typeof(s));
 }
 
 async function buildPayload() {
@@ -148,10 +153,11 @@ async function buildPayload() {
     task_id: a.task_id || 0,
     error_code: a.error_code ? parseInt(a.error_code, 10) || 0 : 0,
     stop_code: a.stop_code ? parseInt(a.stop_code, 10) || 0 : 0,
-    arm_info: buildArmInfo(a.status !== 'MOVING' ? (a.ip ? getCachedArmState(a.ip) : null) : movingArmInfo),
+    arm_info: a.status !== 'MOVING' ? buildArmInfo(a.ip ? getCachedArmState(a.ip) : null) : movingArmInfo[Number(a.amr_id) -1]
   }));
-  console.log(`${amrList[1].amr_id}`);
-    // console.log(`${amrList[0].status}, ${amrList[0].status !== 'MOVING'}`);
+  // console.log("arm_info");
+  // console.log(amrList[0].arm_info);
+  // console.log(`${amrList[0].status}, ${amrList[0].status !== 'MOVING'}`);
   // DebugBuildedPayload(amrList[0]);
   // DebugBuildedPayload(amrList[1]);
 

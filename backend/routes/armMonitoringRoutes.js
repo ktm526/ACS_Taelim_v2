@@ -7,8 +7,10 @@ router.get('/', (req, res) => {
 });
 
 router.post('/state', (req, res) => {
-    const data = req.body["script"];
-    MovingbuildArmInfo(data);
+    let id = req.body["ID"];
+    // console.log(id);
+    const data = JSON.parse(req.body["script"]);
+    MovingbuildArmInfo(data, id);
     // console.log(`[${ip}] Received Doosan States : ${data}`);
     res.json({result : 'Ok'});
 });
