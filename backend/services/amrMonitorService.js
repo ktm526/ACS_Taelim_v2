@@ -281,7 +281,7 @@ function handlePush(sock, ip) {
             });
           } else if (statusStr === 'IDLE' && runningTask.task_type === 'ARM') {
             // ARM 태스크: AMR은 물리적으로 IDLE이지만 팔 작업 중 → MOVING 오버라이드
-            statusStr = 'MOVING';
+            statusStr = 'STOP';
           }
         }
       } catch {

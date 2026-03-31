@@ -152,7 +152,7 @@ const MapCanvas = forwardRef(function MapCanvas({ mapData, amrs = [], trackAmrNa
     return () => window.removeEventListener('resize', fitCanvas);
   }, [fitCanvas]);
 
-  /* 맵 변경 시 중앙 세팅 */
+  /* 맵 변경 시 중앙 세팅 */ 
   useEffect(() => {
     if (!contRef.current || !mapData) return;
     const hdr = safeParse(mapData.additional_info).header || {};
@@ -167,8 +167,8 @@ const MapCanvas = forwardRef(function MapCanvas({ mapData, amrs = [], trackAmrNa
     const rect = contRef.current.getBoundingClientRect();
     setScale(1.5);
     setOffset({
-      x: rect.width / 2 - midX * nSf * 1.5,
-      y: rect.height / 2 - midY * nSf * 1.5,
+      x: (rect.width / 2 - midX * nSf * 1.5 ) - 650,
+      y: (rect.height / 2 - midY * nSf * 1.5) - 200,
     });
   }, [mapData]);
 
