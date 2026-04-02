@@ -235,9 +235,9 @@ function handlePush(sock, ip) {
         const runningTask = await Task.findOne({
           where: { amr_name: name, task_status: 'RUNNING' },
         });
-        if(is_Idle && runningTask.task_type === 'MOVE') idle_cnt++;
 
         if (runningTask) {
+          if (is_Idle && runningTask.task_type === 'MOVE') idle_cnt++;
           console.log(`is_Idle : ${is_Idle}, cnt : ${idle_cnt}`);
           if (statusStr === 'ERROR' || statusStr === 'E-STOP') {
             // 에러/비상정지 → 모든 태스크 타입 ERROR
