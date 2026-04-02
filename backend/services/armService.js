@@ -103,7 +103,7 @@ function sendTcpCommand(ip, port, apiCode, payload, timeout = 5000) {
  */
 async function sendManiCommand(ip, params, isCancel = false) {
   const cmdScript = {
-    CMD_ID: String(params.CMD_ID || '1'),
+    CMD_ID: String(params.CMD_ID || '0'),
     CMD_FROM_1: String(params.from_location_id1 || '0'),
     CMD_TO_1: String(params.to_location_id1 || '0'),
     CMD_FROM_2: String(params.from_location_id2 || '0'),
@@ -351,6 +351,19 @@ function getCachedArmState(ip) {
   return entry ? entry.data : null;
 }
 
+async function ClearBuffer(ip) {
+  // DI 리셋 (참조 코드: id=0 → DI11 리셋)
+  try { await setRobotDi(ip, 0, false); } catch {}
+  // DO 리셋
+  try { await setRobotDo(ip, MANI_WORK_DO_ID, false); } catch {}
+  // DI 리셋 (참조 코드: id=1 → DI12 리셋)
+  try { await setRobotDi(ip, 1, false); } catch {}
+  // DO 리셋
+  try { await setRobotDo(ip, MANI_WORK_DO_ID, false); } catch {}
+  // Refresh Cashe
+  await refreshArmCache();
+}
+
 // ─────────────────────────────────────────────
 //  외부 노출
 // ─────────────────────────────────────────────
@@ -366,5 +379,6 @@ module.exports = {
   getCachedArmState,
   startArmStateCache,
   checkDoosanTaskStatus,
+  ClearBuffer,
   MANI_WORK_DO_ID,
 };

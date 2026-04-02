@@ -31,7 +31,7 @@ const lastTimeUpdate = new Map();   // amr_name → Date.now()
 const connectedState = new Map();   // ip → boolean (연결 상태 변화 추적용)
 
 // ─── 유예 에러 (일시적 에러코드 → 일정 시간 후 ERROR 처리) ──
-const DEFERRED_ERROR_CODES = new Set(['52200']);
+const DEFERRED_ERROR_CODES = new Set(['52200', '52313']);
 const DEFERRED_ERROR_TIMEOUT = 30000; // 30초
 const deferredErrorStart = new Map(); // amr_name → Date.now() (유예 시작 시각)
 
@@ -51,8 +51,8 @@ function mapTaskStatus(tsRaw, json) {
   if (isEmergency) return 'E-STOP';
   if (hasErrors) return 'ERROR';
   if (isStopped) return 'STOP';
-  if (tsRaw === 2) return 'MOVING';
   if ([0, 1, 4].includes(tsRaw)) return 'IDLE';
+  if (tsRaw === 2) return 'MOVING';
   return 'IDLE';
 }
 
@@ -138,6 +138,7 @@ async function logAmrConnection(ip, connected, reason) {
 
 function handlePush(sock, ip) {
   let buf = Buffer.alloc(0);
+  let idle_cnt = 0;
 
   sock.on('data', async (chunk) => {
     buf = Buffer.concat([buf, chunk]);
@@ -149,13 +150,13 @@ function handlePush(sock, ip) {
         buf = Buffer.alloc(0);
         break;
       }
-
+      
       const payloadLen = buf.readUInt32BE(4);
       if (buf.length < 16 + payloadLen) break; // 아직 전체 패킷 안 옴
-
+      
       const payload = buf.slice(16, 16 + payloadLen).toString('utf8');
       buf = buf.slice(16 + payloadLen);
-
+      
       // JSON 파싱
       let json;
       try {
@@ -163,28 +164,29 @@ function handlePush(sock, ip) {
       } catch {
         continue;
       }
-
+      
       const name = json.vehicle_id || json.robot_id;
       if (!name) continue;
-
+      
       // ── time 값 변화 추적 ──
       const currentTime = json.time;
       const lastTime = lastTimeValue.get(name);
       const now = Date.now();
-
+      
       if (lastTime !== currentTime) {
         lastTimeValue.set(name, currentTime);
         lastTimeUpdate.set(name, now);
       }
-
+      
       // ── 상태 계산 ──
       const tsRaw =
-        typeof json.task_status === 'number'
-          ? json.task_status
-          : typeof json.taskStatus === 'number'
-            ? json.taskStatus
-            : null;
-
+      typeof json.task_status === 'number'
+      ? json.task_status
+      : typeof json.taskStatus === 'number'
+      ? json.taskStatus
+      : null;
+      
+      let is_Idle = [0, 1, 4].includes(tsRaw);
       let statusStr = mapTaskStatus(tsRaw, json);
 
       // ── 유예 에러 처리 (052200 등 일시적 에러) ──
@@ -233,8 +235,10 @@ function handlePush(sock, ip) {
         const runningTask = await Task.findOne({
           where: { amr_name: name, task_status: 'RUNNING' },
         });
+        if(is_Idle && runningTask.task_type === 'MOVE') idle_cnt++;
 
         if (runningTask) {
+          console.log(`is_Idle : ${is_Idle}, cnt : ${idle_cnt}`);
           if (statusStr === 'ERROR' || statusStr === 'E-STOP') {
             // 에러/비상정지 → 모든 태스크 타입 ERROR
             const errCode = extractErrorCode(json) || statusStr;
@@ -258,8 +262,10 @@ function handlePush(sock, ip) {
               task_status: 'ERROR',
               error_code: errCode,
             });
-          } else if (statusStr === 'IDLE' && runningTask.task_type === 'MOVE') {
+          // } else if (statusStr === 'IDLE' && runningTask.task_type === 'MOVE') {
+          } else if (is_Idle && runningTask.task_type === 'MOVE' && idle_cnt > 2) {
             // MOVE 태스크: 이동 완료(IDLE) → FINISHED
+            idle_cnt = 0;
             await runningTask.update({
               task_status: 'FINISHED',
               updated_at: new Date(),
