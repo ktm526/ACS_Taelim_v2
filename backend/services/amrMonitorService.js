@@ -25,10 +25,12 @@ const TIME_STALE_TIMEOUT = 5000;  // AMR time 값 변화 없음 → 재연결 (m
 
 // ─── 런타임 상태 ──────────────────────────────
 const sockets = new Map();          // ip → socket
+const connectingIps = new Set();    // 연결 시도 중인 ip
 const lastRecTime = new Map();      // amr_name → Date.now()
 const lastTimeValue = new Map();    // amr_name → json.time
 const lastTimeUpdate = new Map();   // amr_name → Date.now()
 const connectedState = new Map();   // ip → boolean (연결 상태 변화 추적용)
+const lastAttemptLogAt = new Map(); // ip|event|reason → Date.now()
 
 // ─── 유예 에러 (일시적 에러코드 → 일정 시간 후 ERROR 처리) ──
 const DEFERRED_ERROR_CODES = new Set(['52200', '52313']);
@@ -90,6 +92,22 @@ function extractStopCode(json) {
   return null;
 }
 
+function normalizeStationId(value) {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text ? text : null;
+}
+
+function getTaskTargetStation(task) {
+  if (!task?.param) return null;
+  try {
+    const parsed = typeof task.param === 'string' ? JSON.parse(task.param) : task.param;
+    return normalizeStationId(parsed?.station_id ?? parsed?.dest_station ?? parsed?.target_station);
+  } catch {
+    return null;
+  }
+}
+
 // ─────────────────────────────────────────────
 //  DB 업데이트
 // ─────────────────────────────────────────────
@@ -105,6 +123,53 @@ async function markDisconnected(where) {
   }
 }
 
+function shouldLogAttempt(ip, event, reason, throttleMs = 3000) {
+  if (!throttleMs) return true;
+
+  const key = `${ip}|${event}|${reason || ''}`;
+  const now = Date.now();
+  const lastAt = lastAttemptLogAt.get(key) || 0;
+
+  if (now - lastAt < throttleMs) return false;
+  lastAttemptLogAt.set(key, now);
+  return true;
+}
+
+async function resolveAmrNameByIp(ip) {
+  try {
+    const row = await Amr.findOne({ where: { ip } });
+    return row?.amr_name || null;
+  } catch {
+    return null;
+  }
+}
+
+async function logAmrConnectionEvent({
+  ip,
+  status,
+  event,
+  reason,
+  amrName = null,
+  throttleMs = 0,
+  direction = 'OUTBOUND',
+}) {
+  if (!shouldLogAttempt(ip, event, reason, throttleMs)) return;
+
+  const resolvedAmrName = amrName || (await resolveAmrNameByIp(ip));
+
+  writeLog({
+    log_type: 'TCP',
+    direction,
+    interface_id: 'AMR_CONN',
+    target: `${ip}:${PUSH_PORT}`,
+    method: 'TCP',
+    status,
+    request_data: { event, reason: reason || '' },
+    error_message: status === 'ERROR' ? (reason || '연결 끊김') : null,
+    amr_name: resolvedAmrName,
+  });
+}
+
 /**
  * AMR 연결 상태 변경 시 로그 기록 (상태 변화가 있을 때만)
  */
@@ -112,23 +177,12 @@ async function logAmrConnection(ip, connected, reason) {
   const prev = connectedState.get(ip);
   if (prev === connected) return; // 상태 변화 없음 → 로그 안 남김
   connectedState.set(ip, connected);
-
-  let amrName = null;
-  try {
-    const row = await Amr.findOne({ where: { ip } });
-    if (row) amrName = row.amr_name;
-  } catch {}
-
-  writeLog({
-    log_type: 'TCP',
-    direction: connected ? 'INBOUND' : 'OUTBOUND',
-    interface_id: 'AMR_CONN',
-    target: `${ip}:${PUSH_PORT}`,
-    method: 'TCP',
+  await logAmrConnectionEvent({
+    ip,
     status: connected ? 'SUCCESS' : 'ERROR',
-    request_data: { event: connected ? 'CONNECTED' : 'DISCONNECTED', reason: reason || '' },
-    error_message: connected ? null : (reason || '연결 끊김'),
-    amr_name: amrName,
+    event: connected ? 'CONNECTED' : 'DISCONNECTED',
+    reason,
+    direction: connected ? 'INBOUND' : 'OUTBOUND',
   });
 }
 
@@ -189,6 +243,36 @@ function handlePush(sock, ip) {
       let is_Idle = [0, 1, 4].includes(tsRaw);
       let statusStr = mapTaskStatus(tsRaw, json);
 
+      // ── 필드 추출 ──
+      const posX = json.x ?? json.position?.x ?? 0;
+      const posY = json.y ?? json.position?.y ?? 0;
+      const deg = json.angle ?? json.position?.yaw ?? 0;
+
+      const battery =
+        typeof json.battery_level === 'number'
+          ? Math.round(json.battery_level * 100)
+          : typeof json.battery === 'number'
+            ? json.battery
+            : null;
+
+      const currentStation =
+        json.current_station ||
+        json.currentStation ||
+        (Array.isArray(json.finished_path)
+          ? json.finished_path.slice(-1)[0]
+          : null);
+
+      const destStation =
+        json.target_id ||
+        json.targetId ||
+        json.target_label ||
+        json.next_station ||
+        json.nextStation ||
+        null;
+
+      const normalizedCurrentStation = normalizeStationId(currentStation);
+      const normalizedPushDestStation = normalizeStationId(destStation);
+
       // ── 유예 에러 처리 (052200 등 일시적 에러) ──
       // 에러가 유예 대상 코드만으로 구성되면 30초간 ERROR를 보류
       if (statusStr === 'ERROR') {
@@ -237,7 +321,25 @@ function handlePush(sock, ip) {
         });
 
         if (runningTask) {
-          if (is_Idle && runningTask.task_type === 'MOVE') idle_cnt++;
+          const amrRow = await Amr.findOne({ where: { amr_name: name } });
+          const taskTargetStation = getTaskTargetStation(runningTask);
+          const dbDestStation = normalizeStationId(amrRow?.dest_station_id);
+          const targetStation = taskTargetStation || dbDestStation || normalizedPushDestStation;
+          const isMoveAndArrived =
+            runningTask.task_type === 'MOVE' &&
+            is_Idle &&
+            normalizedCurrentStation &&
+            targetStation &&
+            normalizedCurrentStation === targetStation;
+
+          if (runningTask.task_type === 'MOVE') {
+            if (isMoveAndArrived) {
+              idle_cnt++;
+            } else {
+              idle_cnt = 0;
+            }
+          }
+
           // console.log(`is_Idle : ${is_Idle}, cnt : ${idle_cnt}`);
           if (statusStr === 'ERROR' || statusStr === 'E-STOP') {
             // 에러/비상정지 → 모든 태스크 타입 ERROR
@@ -247,7 +349,6 @@ function handlePush(sock, ip) {
               error_code: errCode,
               updated_at: new Date(),
             });
-            const amrRow = await Amr.findOne({ where: { amr_name: name } });
             if (amrRow) {
               await amrRow.update({ task_id: 0, dest_station_id: null });
             }
@@ -263,19 +364,18 @@ function handlePush(sock, ip) {
               error_code: errCode,
             });
           // } else if (statusStr === 'IDLE' && runningTask.task_type === 'MOVE') {
-          } else if (is_Idle && runningTask.task_type === 'MOVE' && idle_cnt > 4) {
-            // MOVE 태스크: 이동 완료(IDLE) → FINISHED
+          } else if (isMoveAndArrived && idle_cnt > 4) {
+            // MOVE 태스크: 목표 스테이션 도착 + IDLE 유지 → FINISHED
             idle_cnt = 0;
             await runningTask.update({
               task_status: 'FINISHED',
               updated_at: new Date(),
             });
-            const amrRow = await Amr.findOne({ where: { amr_name: name } });
             if (amrRow) {
               await amrRow.update({ task_id: 0, dest_station_id: null });
             }
             console.log(
-              `[AMR-Monitor] IDLE 감지 → MOVE Task#${runningTask.task_id} FINISHED`
+              `[AMR-Monitor] 도착 확인 (${normalizedCurrentStation}) + IDLE 유지 → MOVE Task#${runningTask.task_id} FINISHED`
             );
             // MES에 태스크 결과 전송
             sendTaskResult({
@@ -293,33 +393,6 @@ function handlePush(sock, ip) {
       } catch {
         // DB 조회 실패 시 무시
       }
-
-      // ── 필드 추출 ──
-      const posX = json.x ?? json.position?.x ?? 0;
-      const posY = json.y ?? json.position?.y ?? 0;
-      const deg = json.angle ?? json.position?.yaw ?? 0;
-
-      const battery =
-        typeof json.battery_level === 'number'
-          ? Math.round(json.battery_level * 100)
-          : typeof json.battery === 'number'
-            ? json.battery
-            : null;
-
-      const currentStation =
-        json.current_station ||
-        json.currentStation ||
-        (Array.isArray(json.finished_path)
-          ? json.finished_path.slice(-1)[0]
-          : null);
-
-      const destStation =
-        json.target_id ||
-        json.targetId ||
-        json.target_label ||
-        json.next_station ||
-        json.nextStation ||
-        null;
 
       const currentMap = json.current_map || null;
       const errorDetail = extractErrorDetail(json);
@@ -446,14 +519,31 @@ function handlePush(sock, ip) {
 //  TCP 연결
 // ─────────────────────────────────────────────
 
-async function connectToAmr(ip) {
-  if (sockets.has(ip)) return;
+async function connectToAmr(ip, opts = {}) {
+  const {
+    event = 'CONNECT_ATTEMPT',
+    reason = '자동 연결 시도',
+    amrName = null,
+  } = opts;
+
+  if (sockets.has(ip) || connectingIps.has(ip)) return;
+  connectingIps.add(ip);
+
+  await logAmrConnectionEvent({
+    ip,
+    status: 'SUCCESS',
+    event,
+    reason,
+    amrName,
+    throttleMs: 3000,
+  });
 
   const sock = net.createConnection({ port: PUSH_PORT, host: ip });
   sock.setTimeout(3000);
 
   sock.on('error', async (err) => {
     console.warn(`[AMR-Monitor] 연결 실패 (${ip}):`, err.message);
+    connectingIps.delete(ip);
     sock.destroy();
     sockets.delete(ip);
     await markDisconnected({ ip });
@@ -461,13 +551,16 @@ async function connectToAmr(ip) {
   });
 
   sock.on('connect', async () => {
-    let amrName = 'unknown';
-    try {
-      const row = await Amr.findOne({ where: { ip } });
-      if (row) amrName = row.amr_name;
-    } catch {}
+    connectingIps.delete(ip);
+    let resolvedAmrName = amrName || 'unknown';
+    if (!amrName) {
+      try {
+        const row = await Amr.findOne({ where: { ip } });
+        if (row) resolvedAmrName = row.amr_name;
+      } catch {}
+    }
 
-    console.log(`[AMR-Monitor] 연결 성공 → ${ip} (${amrName})`);
+    console.log(`[AMR-Monitor] 연결 성공 → ${ip} (${resolvedAmrName})`);
     sockets.set(ip, sock);
     sock.setTimeout(0);
     handlePush(sock, ip);
@@ -476,6 +569,7 @@ async function connectToAmr(ip) {
 
   sock.on('timeout', async () => {
     console.warn(`[AMR-Monitor] 타임아웃 (${ip})`);
+    connectingIps.delete(ip);
     sock.destroy();
     sockets.delete(ip);
     await markDisconnected({ ip });
@@ -487,7 +581,7 @@ async function connectToAmr(ip) {
 //  수동 재연결
 // ─────────────────────────────────────────────
 
-async function reconnectAmr(amrName) {
+async function reconnectAmr(amrName, reason = '수동 재연결') {
   const row = await Amr.findOne({ where: { amr_name: amrName } });
   if (!row || !row.ip) throw new Error('AMR not found or no IP');
   const ip = row.ip;
@@ -498,8 +592,13 @@ async function reconnectAmr(amrName) {
     sockets.get(ip).destroy();
     sockets.delete(ip);
   }
+  connectingIps.delete(ip);
 
-  await connectToAmr(ip);
+  await connectToAmr(ip, {
+    event: 'RECONNECT_ATTEMPT',
+    reason,
+    amrName,
+  });
 }
 
 // ─────────────────────────────────────────────
@@ -565,7 +664,7 @@ function startMonitoring() {
           `[AMR-Monitor] time 값 미변경(${TIME_STALE_TIMEOUT}ms) → ${name} 재연결 시도`
         );
         try {
-          await reconnectAmr(name);
+          await reconnectAmr(name, `time 값 미변경 (${TIME_STALE_TIMEOUT}ms)`);
           lastTimeUpdate.set(name, now);
         } catch (e) {
           console.error(

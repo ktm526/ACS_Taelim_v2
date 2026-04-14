@@ -78,6 +78,30 @@ function tryParseJson(str) {
   }
 }
 
+function getConnectionMeta(record) {
+  const request = tryParseJson(record.request_data);
+  const isObject = request && typeof request === 'object' && !Array.isArray(request);
+
+  return {
+    event: isObject ? request.event || null : null,
+    reason: isObject ? request.reason || record.error_message || null : record.error_message || null,
+  };
+}
+
+const CONN_EVENT_LABEL = {
+  CONNECT_ATTEMPT: '연결 시도',
+  RECONNECT_ATTEMPT: '재연결 시도',
+  CONNECTED: '연결 성공',
+  DISCONNECTED: '연결 끊김',
+};
+
+const CONN_EVENT_COLOR = {
+  CONNECT_ATTEMPT: 'processing',
+  RECONNECT_ATTEMPT: 'cyan',
+  CONNECTED: 'success',
+  DISCONNECTED: 'error',
+};
+
 function JsonBlock({ data, maxLen = 2000 }) {
   if (!data) return <Text type="secondary">-</Text>;
   const parsed = typeof data === 'string' ? tryParseJson(data) : data;
@@ -613,6 +637,7 @@ function ConnectionLogTab({ token }) {
     status: undefined,
     amr_name: '',
     dateRange: null,
+    keyword: '',
   });
   const [pagination, setPagination] = useState({ page: 1, pageSize: 30 });
   const [logs, setLogs] = useState([]);
@@ -646,15 +671,16 @@ function ConnectionLogTab({ token }) {
       render: (v) => <Tag color={INTERFACE_COLOR[v] || 'default'}>{v}</Tag>,
     },
     {
-      title: '상태',
-      dataIndex: 'status',
-      key: 'status',
-      width: 100,
-      render: (v) => (
-        <Tag color={v === 'SUCCESS' ? 'success' : 'error'}>
-          {v === 'SUCCESS' ? '연결됨' : '연결 끊김'}
-        </Tag>
-      ),
+      title: '이벤트',
+      key: 'event',
+      width: 120,
+      render: (_, record) => {
+        const { event } = getConnectionMeta(record);
+        const label = CONN_EVENT_LABEL[event] || record.status;
+        const color =
+          CONN_EVENT_COLOR[event] || (record.status === 'SUCCESS' ? 'success' : 'error');
+        return <Tag color={color}>{label}</Tag>;
+      },
     },
     {
       title: '이름',
@@ -675,11 +701,13 @@ function ConnectionLogTab({ token }) {
       ),
     },
     {
-      title: '에러',
-      dataIndex: 'error_message',
-      key: 'error_message',
+      title: '사유',
+      key: 'reason',
       ellipsis: true,
-      render: (v) => (v ? <Text type="danger" style={{ fontSize: 12 }}>{v}</Text> : '-'),
+      render: (_, record) => {
+        const { reason } = getConnectionMeta(record);
+        return reason ? <Text style={{ fontSize: 12 }}>{reason}</Text> : '-';
+      },
     },
   ];
 
@@ -694,6 +722,7 @@ function ConnectionLogTab({ token }) {
       if (filters.interface_id) params.interface_id = filters.interface_id;
       if (filters.status) params.status = filters.status;
       if (filters.amr_name) params.amr_name = filters.amr_name;
+      if (filters.keyword) params.keyword = filters.keyword;
       if (filters.dateRange && filters.dateRange[0]) {
         params.from = filters.dateRange[0].toISOString();
       }
@@ -727,6 +756,7 @@ function ConnectionLogTab({ token }) {
       status: undefined,
       amr_name: '',
       dateRange: null,
+      keyword: '',
     });
     setPagination({ page: 1, pageSize: 30 });
   };
@@ -768,6 +798,16 @@ function ConnectionLogTab({ token }) {
           value={filters.amr_name}
           onChange={(e) => handleFilterChange('amr_name', e.target.value)}
           style={{ width: 120 }}
+          size="small"
+          allowClear
+        />
+        <Input
+          placeholder="사유 검색"
+          value={filters.keyword}
+          onChange={(e) => handleFilterChange('keyword', e.target.value)}
+          onPressEnter={fetchLogs}
+          prefix={<Search size={13} />}
+          style={{ width: 180 }}
           size="small"
           allowClear
         />
