@@ -238,7 +238,7 @@ function handlePush(sock, ip) {
 
         if (runningTask) {
           if (is_Idle && runningTask.task_type === 'MOVE') idle_cnt++;
-          console.log(`is_Idle : ${is_Idle}, cnt : ${idle_cnt}`);
+          // console.log(`is_Idle : ${is_Idle}, cnt : ${idle_cnt}`);
           if (statusStr === 'ERROR' || statusStr === 'E-STOP') {
             // 에러/비상정지 → 모든 태스크 타입 ERROR
             const errCode = extractErrorCode(json) || statusStr;
@@ -263,7 +263,7 @@ function handlePush(sock, ip) {
               error_code: errCode,
             });
           // } else if (statusStr === 'IDLE' && runningTask.task_type === 'MOVE') {
-          } else if (is_Idle && runningTask.task_type === 'MOVE' && idle_cnt > 2) {
+          } else if (is_Idle && runningTask.task_type === 'MOVE' && idle_cnt > 4) {
             // MOVE 태스크: 이동 완료(IDLE) → FINISHED
             idle_cnt = 0;
             await runningTask.update({

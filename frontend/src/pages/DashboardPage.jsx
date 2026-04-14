@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 import MapCanvas from '@/components/MapCanvas';
 import usePolling from '@/hooks/usePolling';
-import { amrAPI, mapAPI, taskAPI } from '@/api';
+import { amrAPI, mapAPI, taskAPI, armErrorClearAPI } from '@/api';
 
 const { Text } = Typography;
 
@@ -145,6 +145,20 @@ const parseAmrStatus = (amr) => {
   };
 };
 
+
+// AMR DI 11, 12 초기화
+const handleSend = async (amr_name) => {
+  try{
+    const data = {
+      "amr_name" : amr_name
+    };
+    await armErrorClearAPI.send(data);
+    console.log(res);
+  } catch (err) {
+    // console.error(err);
+  }
+};
+
 export default function DashboardPage() {
   const { token } = theme.useToken();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -184,7 +198,7 @@ export default function DashboardPage() {
 
   // AMR 추적
   const [trackAmrName, setTrackAmrName] = useState(null);
-
+  
   // 맵 자동 선택
   useEffect(() => {
     if (maps.length > 0 && !selectedMap) {
@@ -610,6 +624,7 @@ export default function DashboardPage() {
                   ({detailAmr.ip})
                 </Text>
               )}
+              <Button onClick={() => handleSend(detailAmr.amr_name)}>ClearError</Button>
             </div>
           ) : 'AMR 상세'
         }

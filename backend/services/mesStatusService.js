@@ -25,7 +25,8 @@ let lastMesBase = null; // 캐시된 MES 베이스 URL (http://ip:port)
 let settingCheckCount = 0;
 const SETTING_REFRESH_EVERY = 10; // 10번(10초)마다 설정 재조회
 let mesConnected = null; // MES 연결 상태 추적 (null=초기, true=연결, false=끊김)
-let movingArmInfo = [];
+const ArmInfo = [];
+let buildFlag = false;
 
 // ─────────────────────────────────────────────
 //  MES 베이스 URL 조회 (설정 테이블에서)
@@ -119,19 +120,40 @@ function buildArmInfo(doosanState) {
     arm_stop_code: 0,
   }];
 }
+const newBuildArmInfo = async (req, res) => {
+  const okResp = { result_msg: 'OK'};
 
-function MovingbuildArmInfo(doosanState, id)
-{
-  let idx = Number(id)-1;
-  if(!doosanState) console.log('doosanstate is null');
-  // console.log(doosanState);
-  // movingArmInfo = buildArmInfo(doosanState);
-  // console.log("movingArmInfo");
-  // console.log(movingArmInfo);
-  let temp = buildArmInfo(doosanState);
-  // console.log(temp);
-  movingArmInfo[idx] = temp;
-  //  console.log(typeof(s));
+  if(buildFlag) return res.status(202).json(okResp);
+  
+  const id = req.body["ID"];
+  const data = JSON.parse(req.body["script"]);
+  buildFlag = true;
+  
+  res.json(okResp);
+  try{
+    // if(!id){
+    //   return res.status(400).json({
+    //     result_msg: "FAIL: ID are required for buildArmInfo",
+    //     server_time: serverTime,
+    //   });
+    // }
+    
+    // if(!data){
+    //   return res.status(401).json({
+    //     result_msg: "FAIL: Script Data are required for buildArmInfo",
+    //     server_time: serverTime,
+    //   });
+    // }
+    const idx = Number(id)-1;
+    ArmInfo[idx] = buildArmInfo(data);
+  }
+  catch(err){
+    const errorResp = {result_msg: err};
+    res.json(errorResp);
+  }
+  finally{
+    buildFlag = false;
+  }
 }
 
 async function buildPayload() {
@@ -153,28 +175,15 @@ async function buildPayload() {
     task_id: a.task_id || 0,
     error_code: a.error_code ? parseInt(a.error_code, 10) || 0 : 0,
     stop_code: a.stop_code ? parseInt(a.stop_code, 10) || 0 : 0,
-    arm_info: a.status !== 'MOVING' ? buildArmInfo(a.ip ? getCachedArmState(a.ip) : null) : movingArmInfo[Number(a.amr_id) -1]
+    arm_info: ArmInfo[Number(a.amr_id) -1]
+    // arm_info: a.status !== 'MOVING' ? buildArmInfo(a.ip ? getCachedArmState(a.ip) : null) : newBuildArmInfo[Number(a.amr_id) -1]
   }));
-  // console.log("arm_info");
-  // console.log(amrList[0].arm_info);
-  // console.log(`${amrList[0].status}, ${amrList[0].status !== 'MOVING'}`);
-  // DebugBuildedPayload(amrList[0]);
-  // DebugBuildedPayload(amrList[1]);
 
   return {
     request_time: new Date().toISOString(),
     amr_count: amrList.length,
     amr_list: amrList,
   };
-}
-
-function DebugBuildedPayload(obj)
-{
-  console.log(`
-    amr id : ${obj.amr_id}, amr name : ${obj.amr_name}, amr status : ${obj.status}, amr current : ${obj.current_station_id}, amr dest : ${obj.dest_station_id},
-    task id : ${obj.task_id}, error code : ${obj.error_code}, stop code : ${obj.stop_code},
-    arm_info : { arm status: ${obj.arm_info[0].arm_status}, arm error code : ${obj.arm_info[0].error_code}, arm vision code : ${obj.arm_info[0].arm_vision_error_code}, arm stop code : ${obj.arm_info[0].arm_stop_code}
-    `);
 }
 
 // ─────────────────────────────────────────────
@@ -360,4 +369,4 @@ function stopMesStatus() {
   }
 }
 
-module.exports = { startMesStatus, stopMesStatus, sendTaskResult, MovingbuildArmInfo };
+module.exports = { startMesStatus, stopMesStatus, sendTaskResult, newBuildArmInfo };

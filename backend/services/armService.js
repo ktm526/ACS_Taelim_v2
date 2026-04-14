@@ -12,6 +12,7 @@ const { Amr, Task } = require('../model');
 const amrService = require('./amrService');
 const { sendTaskResult } = require('./mesStatusService');
 const { writeLog } = require('./logService');
+const { sockets } = require('./amrMonitorService');
 
 // ── 포트 & API 코드 (환경변수 또는 기본값) ──
 const MANI_CMD_PORT  = Number(process.env.MANI_CMD_PORT || 19207);
@@ -214,10 +215,10 @@ async function pollArmTasks() {
       // AMR의 additional_info에서 DI 읽기
       const amr = await Amr.findOne({ where: { amr_name: info.amrName } });
       if (!amr) continue;
-
+      
       const diOk = getDiStatus(amr.additional_info, MANI_WORK_OK_DI);
       const diErr = getDiStatus(amr.additional_info, MANI_WORK_ERR_DI);
-
+      
       if (diOk === true) {
         // ── 성공 ──
         console.log(`[ARM] Task#${taskId} 성공 (DI${MANI_WORK_OK_DI}=1)`);
@@ -225,6 +226,7 @@ async function pollArmTasks() {
         try { await setRobotDi(info.amrIp, 0, false); } catch {}
         // DO 리셋
         try { await setRobotDo(info.amrIp, MANI_WORK_DO_ID, false); } catch {}
+        await checkDiStatus(amr.ip, MANI_WORK_OK_DI);
         await task.update({ task_status: 'FINISHED', updated_at: new Date() });
         await amr.update({ task_id: 0 });
         activeArmTasks.delete(taskId);
@@ -238,6 +240,7 @@ async function pollArmTasks() {
         try { await setRobotDi(info.amrIp, 1, false); } catch {}
         // DO 리셋
         try { await setRobotDo(info.amrIp, MANI_WORK_DO_ID, false); } catch {}
+        await checkDiStatus(amr.ip, MANI_WORK_ERR_DI);
         await task.update({ task_status: 'ERROR', error_code: 'MANI_ERROR', updated_at: new Date() });
         await amr.update({ task_id: 0 });
         activeArmTasks.delete(taskId);
@@ -249,6 +252,22 @@ async function pollArmTasks() {
       console.error(`[ARM] 모니터링 오류 (task#${taskId}):`, e.message);
     }
   }
+}
+
+async function checkDiStatus(amr_ip, di_id)
+{
+  console.log('Start Checking DI status');
+  await refreshArmCache();
+  while(true){
+    console.log('Checking...');
+    const amr = await Amr.findOne({ where: { ip: amr_ip } });
+    di = getDiStatus(amr.additional_info, di_id);
+    
+    if (di !== true) break;
+    
+    await new Promise(r => setTimeout(r,50));
+  }
+  console.log('End Checking DI status');
 }
 
 function startArmMonitor() {
@@ -351,15 +370,54 @@ function getCachedArmState(ip) {
   return entry ? entry.data : null;
 }
 
-async function ClearBuffer(ip) {
+const initRobotDI = async (req, res) => {
+  const serverTime = new Date().toISOString();
+  try{
+    const amr_name = req.body["amr_name"];
+    // console.log(`amr_name : ${amr_name}`);
+
+    if (!amr_name) {
+      return res.status(400).json({
+        result_msg: 'FAIL: amr_name are required for init',
+        server_time: serverTime,
+      });
+    }
+    
+    // AMR 조회
+    const amr = await Amr.findOne({ where: { amr_name } });
+    if (!amr) {
+      return res.status(404).json({
+      result_msg: `FAIL: AMR "${amr_name}" not found`,
+      server_time: serverTime,
+      });
+    }
+
+    // const sock = sockets.get(amr.ip);
+    // if(!sock){
+    //   return res.status(503).json({
+    //     result_msg: `FAIL: AMR "${amr_name}" : "${amr.ip}" not connected`,
+    //     server_time: serverTime,
+    //   });
+    // }
+    
+    await setRobotDIzero(amr.ip);
+    
+    const okResp = { result_msg: 'OK', server_time: serverTime };
+    return res.json(okResp);
+  }
+  catch(err){
+    const errorResp = {result_msg: err, server_time: serverTime };
+    return res.json(errorResp);
+  }
+}
+
+async function setRobotDIzero(ip) {
+  // DO 리셋
+  try { await setRobotDo(ip, MANI_WORK_DO_ID, false); } catch {}
   // DI 리셋 (참조 코드: id=0 → DI11 리셋)
   try { await setRobotDi(ip, 0, false); } catch {}
-  // DO 리셋
-  try { await setRobotDo(ip, MANI_WORK_DO_ID, false); } catch {}
   // DI 리셋 (참조 코드: id=1 → DI12 리셋)
   try { await setRobotDi(ip, 1, false); } catch {}
-  // DO 리셋
-  try { await setRobotDo(ip, MANI_WORK_DO_ID, false); } catch {}
   // Refresh Cashe
   await refreshArmCache();
 }
@@ -379,6 +437,6 @@ module.exports = {
   getCachedArmState,
   startArmStateCache,
   checkDoosanTaskStatus,
-  ClearBuffer,
+  initRobotDI,
   MANI_WORK_DO_ID,
 };

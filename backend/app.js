@@ -9,7 +9,7 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(morgan('dev'));
+// app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -34,6 +34,11 @@ app.get('/api-docs.json', (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.send(swaggerSpec);
 });
+
+// Ignore Log api
+app.use(morgan('dev', {
+  skip: (req, res) => req.originalUrl.includes('monitor/state')
+}));
 
 // Routes
 app.use('/api', routes);

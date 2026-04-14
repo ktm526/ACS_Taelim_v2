@@ -12,7 +12,6 @@ const amrService = require('../services/amrService');
 const {
   sendManiCommand,
   setRobotDo,
-  ClearBuffer,
   activeArmTasks,
   MANI_WORK_DO_ID,
 } = require('../services/armService');
@@ -100,8 +99,6 @@ const armCommand = async (req, res) => {
           server_time: serverTime,
         });
       }
-
-      await ClearBuffer(amr.ip);
 
       // 태스크 생성
       const task = await Task.create({

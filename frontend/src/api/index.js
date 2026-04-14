@@ -38,6 +38,11 @@ export const armCommandAPI = {
   send: (data) => api.post('/arm_command', data),
 };
 
+/* ── Arm Task State Init (MES → ACS) ── */
+export const armErrorClearAPI = {
+  send: (data) => api.post('/arm/task_init', data)
+}
+
 /* ── Map ── */
 export const mapAPI = {
   getAll: () => api.get('/maps'),
