@@ -31,6 +31,7 @@ const lastTimeValue = new Map();    // amr_name → json.time
 const lastTimeUpdate = new Map();   // amr_name → Date.now()
 const connectedState = new Map();   // ip → boolean (연결 상태 변화 추적용)
 const lastAttemptLogAt = new Map(); // ip|event|reason → Date.now()
+const socketCloseReasons = new WeakMap(); // socket → close reason
 
 // ─── 유예 에러 (일시적 에러코드 → 일정 시간 후 ERROR 처리) ──
 const DEFERRED_ERROR_CODES = new Set(['52200', '52313']);
@@ -168,6 +169,24 @@ async function logAmrConnectionEvent({
     error_message: status === 'ERROR' ? (reason || '연결 끊김') : null,
     amr_name: resolvedAmrName,
   });
+}
+
+function setSocketCloseReason(sock, reason) {
+  if (!sock || !reason) return;
+  socketCloseReasons.set(sock, reason);
+}
+
+function consumeSocketCloseReason(sock) {
+  if (!sock) return null;
+  const reason = socketCloseReasons.get(sock) || null;
+  if (reason) socketCloseReasons.delete(sock);
+  return reason;
+}
+
+function destroySocketWithReason(sock, reason) {
+  if (!sock) return;
+  setSocketCloseReason(sock, reason);
+  sock.destroy();
 }
 
 /**
@@ -501,17 +520,23 @@ function handlePush(sock, ip) {
 
   sock.on('error', async (err) => {
     console.warn(`[AMR-Monitor] 소켓 에러 (${ip}):`, err.message);
+    setSocketCloseReason(sock, `소켓 에러: ${err.message}`);
     sock.destroy();
     sockets.delete(ip);
     await markDisconnected({ ip });
     logAmrConnection(ip, false, `소켓 에러: ${err.message}`);
   });
 
-  sock.on('close', () => {
-    console.warn(`[AMR-Monitor] 연결 종료 (${ip})`);
+  sock.on('close', (hadError) => {
+    const reason =
+      consumeSocketCloseReason(sock) ||
+      (hadError
+        ? '소켓 에러로 인한 연결 종료'
+        : '원격에서 연결을 종료했거나 종료 사유를 확인하지 못함');
+    console.warn(`[AMR-Monitor] 연결 종료 (${ip}): ${reason}`);
     sockets.delete(ip);
     markDisconnected({ ip });
-    logAmrConnection(ip, false, '연결 종료');
+    logAmrConnection(ip, false, reason);
   });
 }
 
@@ -589,7 +614,7 @@ async function reconnectAmr(amrName, reason = '수동 재연결') {
   console.log(`[AMR-Monitor] 수동 재연결 시도 → ${amrName} (${ip})`);
 
   if (sockets.has(ip)) {
-    sockets.get(ip).destroy();
+    destroySocketWithReason(sockets.get(ip), `재연결을 위한 기존 연결 종료: ${reason}`);
     sockets.delete(ip);
   }
   connectingIps.delete(ip);
@@ -645,7 +670,10 @@ function startMonitoring() {
           const row = await Amr.findOne({ where: { amr_name: name } });
           if (row && row.ip) {
             if (sockets.has(row.ip)) {
-              sockets.get(row.ip).destroy();
+              destroySocketWithReason(
+                sockets.get(row.ip),
+                `수신 타임아웃으로 소켓 종료 (${STALE_TIMEOUT}ms 동안 push 없음)`
+              );
               sockets.delete(row.ip);
             }
             logAmrConnection(row.ip, false, `수신 타임아웃 (${STALE_TIMEOUT}ms)`);
