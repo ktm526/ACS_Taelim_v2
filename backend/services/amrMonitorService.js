@@ -22,6 +22,8 @@ const PUSH_PORT = Number(process.env.AMR_PUSH_PORT || 19301);
 const RECONNECT_INTERVAL = 1000;   // 재연결 시도 주기 (ms)
 const STALE_TIMEOUT = 3000;        // 수신 없음 → 연결 끊김 판정 (ms)
 const TIME_STALE_TIMEOUT = 5000;  // AMR time 값 변화 없음 → 재연결 (ms)
+const KEEPALIVE_DELAY = 10000;     // TCP keepalive probe 시작 지연 (ms)
+const CONNECT_GUARD_TIMEOUT = 5000; // 연결 시도 안전장치: 이 시간 내 결판 안 나면 강제 정리 (ms)
 
 // ─── 런타임 상태 ──────────────────────────────
 const sockets = new Map();          // ip → socket
@@ -566,9 +568,30 @@ async function connectToAmr(ip, opts = {}) {
   const sock = net.createConnection({ port: PUSH_PORT, host: ip });
   sock.setTimeout(3000);
 
+  // ── 연결 시도 안전장치 ──
+  // connect/error/timeout 이벤트가 (OS·네트워크 엣지케이스로) 하나도 발생하지
+  // 않으면 connectingIps에 영구 잔류 → 이후 모든 재연결이 차단된다.
+  // 일정 시간 내 결판이 나지 않으면 강제로 정리한다.
+  let settled = false;
+  const finalizeAttempt = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(guardTimer);
+    connectingIps.delete(ip);
+  };
+  const guardTimer = setTimeout(() => {
+    if (settled) return;
+    console.warn(`[AMR-Monitor] 연결 시도 안전장치 발동 (${ip}) → 강제 정리`);
+    finalizeAttempt();
+    setSocketCloseReason(sock, `연결 시도 안전장치 타임아웃 (${CONNECT_GUARD_TIMEOUT}ms)`);
+    sock.destroy();
+    sockets.delete(ip);
+    markDisconnected({ ip });
+  }, CONNECT_GUARD_TIMEOUT);
+
   sock.on('error', async (err) => {
     console.warn(`[AMR-Monitor] 연결 실패 (${ip}):`, err.message);
-    connectingIps.delete(ip);
+    finalizeAttempt();
     sock.destroy();
     sockets.delete(ip);
     await markDisconnected({ ip });
@@ -576,7 +599,7 @@ async function connectToAmr(ip, opts = {}) {
   });
 
   sock.on('connect', async () => {
-    connectingIps.delete(ip);
+    finalizeAttempt();
     let resolvedAmrName = amrName || 'unknown';
     if (!amrName) {
       try {
@@ -588,17 +611,24 @@ async function connectToAmr(ip, opts = {}) {
     console.log(`[AMR-Monitor] 연결 성공 → ${ip} (${resolvedAmrName})`);
     sockets.set(ip, sock);
     sock.setTimeout(0);
+    // 죽은 피어(half-open)를 OS 레벨에서 감지·정리하기 위해 keepalive 활성화
+    sock.setKeepAlive(true, KEEPALIVE_DELAY);
     handlePush(sock, ip);
     logAmrConnection(ip, true, '연결 성공');
   });
 
   sock.on('timeout', async () => {
     console.warn(`[AMR-Monitor] 타임아웃 (${ip})`);
-    connectingIps.delete(ip);
+    finalizeAttempt();
     sock.destroy();
     sockets.delete(ip);
     await markDisconnected({ ip });
     logAmrConnection(ip, false, '연결 타임아웃');
+  });
+
+  // connect 단계에서 error/timeout 없이 close되는 경우에도 connectingIps 정리 보장
+  sock.on('close', () => {
+    finalizeAttempt();
   });
 }
 

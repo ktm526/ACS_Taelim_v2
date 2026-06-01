@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>ACS 사용자 매뉴얼</title>
+<style>
+  @page { size: A4; margin: 18mm 15mm; }
+  html, body { background: #fff; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Pretendard', 'Noto Sans KR',
+                 'Apple SD Gothic Neo', 'Malgun Gothic', Arial, sans-serif;
+    color: #222;
+    line-height: 1.7;
+    font-size: 11.5pt;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 8mm 4mm;
+  }
+  h1 { font-size: 22pt; border-bottom: 3px solid #1677ff; padding-bottom: 6px; }
+  h2 { font-size: 16pt; margin-top: 28px; border-bottom: 1px solid #d9d9d9; padding-bottom: 4px; }
+  h3 { font-size: 13pt; margin-top: 20px; color: #1677ff; }
+  p, li { font-size: 11pt; }
+  code { background: #f5f5f5; padding: 1px 5px; border-radius: 3px; font-size: 90%; }
+  pre code { display: block; padding: 10px 12px; background: #263238; color: #eceff1; border-radius: 6px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0 14px; font-size: 10.5pt; }
+  th, td { border: 1px solid #d9d9d9; padding: 6px 8px; text-align: left; }
+  th { background: #fafafa; }
+  img { max-width: 100%; border: 1px solid #e5e7eb; border-radius: 6px; margin: 6px 0; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+  em { display: block; color: #666; font-size: 9.5pt; margin: -4px 0 14px; text-align: center; }
+  blockquote { margin: 8px 0; padding: 8px 12px; background: #f0f7ff; border-left: 4px solid #1677ff; border-radius: 4px; }
+  hr { border: none; border-top: 1px solid #e5e7eb; margin: 20px 0; }
+  a { color: #1677ff; }
+</style>
+</head>
+<body>
+<h1>ACS (AMR Control System) 사용자 매뉴얼</h1>
+<blockquote>
+<p><strong>발행일</strong>: 2026년 4월 23일
+<strong>대상 버전</strong>: frontend 0.0.0, backend 1.0.0
+<strong>접속 주소 예시</strong>: <a href="http://localhost:3000">http://localhost:3000</a></p>
+</blockquote>
+<p>본 매뉴얼은 ACS 시스템의 화면별 사용법을 실제 렌더링된 UI 스크린샷과 함께 설명합니다.</p>
+<hr>
+<h2>목차</h2>
+<ol>
+<li><a href="#1-%EB%A1%9C%EA%B7%B8%EC%9D%B8">로그인</a></li>
+<li><a href="#2-%EB%8C%80%EC%8B%9C%EB%B3%B4%EB%93%9C-%EA%B0%9C%EC%9A%94">대시보드 개요</a></li>
+<li><a href="#3-amr-%EC%B6%94%EA%B0%80">AMR 추가</a></li>
+<li><a href="#4-amr-%EC%83%81%EC%84%B8-%ED%99%95%EC%9D%B8">AMR 상세 확인</a></li>
+<li><a href="#5-amr-%EC%A0%9C%EA%B1%B0">AMR 제거</a></li>
+<li><a href="#6-amr-%EC%9D%B4%EB%8F%99-%EB%AA%85%EB%A0%B9">AMR 이동 명령</a></li>
+<li><a href="#7-%ED%83%9C%EC%8A%A4%ED%81%AC-%ED%99%95%EC%9D%B8-%EB%B0%8F-%EC%B7%A8%EC%86%8C%EC%82%AD%EC%A0%9C">태스크 확인 및 취소(삭제)</a></li>
+<li><a href="#8-%EB%A7%B5-%EA%B4%80%EB%A6%AC">맵 관리</a></li>
+<li><a href="#9-%ED%86%B5%EC%8B%A0-%EB%A1%9C%EA%B7%B8">통신 로그</a></li>
+<li><a href="#10-%EC%84%A4%EC%A0%95-%ED%8E%98%EC%9D%B4%EC%A7%80">설정 페이지</a></li>
+<li><a href="#11-%EC%8B%9C%EC%8A%A4%ED%85%9C-%EC%9E%AC%EC%8B%9C%EC%9E%91pm2">시스템 재시작(PM2)</a></li>
+<li><a href="#12-%EB%A1%9C%EA%B7%B8%EC%95%84%EC%9B%83">로그아웃</a></li>
+</ol>
+<hr>
+<h2>1. 로그인</h2>
+<p><code>/login</code> 경로에서 관리자 계정으로 로그인합니다.</p>
+<p><img src="images/01-login-empty.png" alt="로그인 페이지 초기 화면"></p>
+<p><em>로그인 페이지 초기 화면</em></p>
+<p>아이디와 비밀번호를 입력하고 <strong>로그인</strong> 버튼을 클릭합니다.</p>
+<p><img src="images/02-login-filled.png" alt="아이디/비밀번호 입력 완료"></p>
+<p><em>아이디/비밀번호 입력 완료</em></p>
+<ul>
+<li>입력값이 비어있으면 필드 하단에 “아이디를 입력하세요” / “비밀번호를 입력하세요” 검증 메시지가 표시됩니다.</li>
+<li>인증 실패 시 우측 상단 토스트로 “로그인에 실패했습니다.” 메시지가 표시됩니다.</li>
+<li>로그인이 성공하면 <code>/</code> (대시보드)로 이동합니다. <code>role === &#39;admin&#39;</code> 계정만 사이드바(맵 관리 / 통신 로그 / 설정)가 표시됩니다.</li>
+</ul>
+<hr>
+<h2>2. 대시보드 개요</h2>
+<p>대시보드는 상단의 <strong>AMR 가로 리스트</strong>와 하단의 <strong>맵 캔버스</strong>로 구성됩니다.</p>
+<p><img src="images/03-dashboard-overview.png" alt="대시보드 전체 레이아웃"></p>
+<p><em>대시보드 전체 레이아웃</em></p>
+<ul>
+<li><strong>AMR 카드</strong>: 아이콘 + 이름 + 상태 태그(대기/이동/오류/정지/비상정지/연결 끊김), 배터리, 현재 위치, 목적지를 한 줄에 표시합니다.</li>
+<li><strong>추적 버튼(조준 아이콘)</strong>: AMR 카드 우측의 정사각형 영역을 누르면 해당 AMR을 따라 지도 카메라가 이동합니다. 다시 누르면 추적 해제.</li>
+<li><strong>+ 버튼</strong>: AMR 리스트 맨 끝의 점선 테두리 박스. 새로운 AMR을 추가합니다.</li>
+<li><strong>맵 변경 버튼</strong>: 지도 카드 우측 상단의 톱니 아이콘 버튼. 업로드된 맵 중 하나를 선택합니다.</li>
+</ul>
+<p><img src="images/10-map-canvas.png" alt="지도 캔버스"></p>
+<p><em>지도 캔버스</em></p>
+<ul>
+<li><strong>드래그</strong>: 지도를 이동합니다.</li>
+<li><strong>마우스 휠</strong>: 확대/축소.</li>
+<li><strong>우클릭</strong>: 빈 공간이 아닌 <strong>스테이션 위에서</strong> 우클릭하면 AMR을 선택해 이동 명령을 전송할 수 있는 메뉴가 뜹니다.</li>
+</ul>
+<hr>
+<h2>3. AMR 추가</h2>
+<p>대시보드 상단의 <strong>+ 버튼</strong>(점선 테두리)을 클릭합니다.</p>
+<p><img src="images/04-amr-add-modal-empty.png" alt="AMR 추가 모달 초기 상태"></p>
+<p><em>AMR 추가 모달 초기 상태</em></p>
+<p><strong>AMR 이름</strong>과 <strong>IP 주소</strong>를 입력합니다.</p>
+<p><img src="images/05-amr-add-modal-filled.png" alt="입력 완료"></p>
+<p><em>입력 완료</em></p>
+<ul>
+<li>이름과 IP는 필수입니다.</li>
+<li><strong>추가</strong> 버튼을 누르면 <code>POST /api/amr</code> 요청이 전송되고, 초기 상태는 <code>NO_CONN</code>으로 등록됩니다.</li>
+<li>백엔드의 AMR 모니터 서비스가 해당 IP로 연결되면 상태가 <code>IDLE / MOVING / STOP / ERROR / E-STOP</code> 등으로 갱신됩니다.</li>
+</ul>
+<p><img src="images/06-amr-add-done.png" alt="추가 완료 화면"></p>
+<p><em>추가 완료 화면</em></p>
+<hr>
+<h2>4. AMR 상세 확인</h2>
+<p>상단 리스트에서 AMR 카드의 <strong>정보 영역</strong>(좌측, 추적 버튼이 아닌 부분)을 클릭하면 상세 모달이 열립니다.</p>
+<p><img src="images/07-amr-detail.png" alt="AMR 상세 모달"></p>
+<p><em>AMR 상세 모달</em></p>
+<p>모달은 다음 섹션으로 구성됩니다:</p>
+<ol>
+<li><strong>상단 헤더</strong>: 이름, 상태 태그, IP, <strong>ClearError</strong> 버튼(DI 11/12 에러 초기화).</li>
+<li><strong>요약 카드 4개</strong>: 배터리, 현재 위치, 목적지, 좌표(<code>x, y</code>).</li>
+<li><strong>에러 / 정지 상태 테이블</strong>: 발생한 에러 코드와 메시지, <code>stop_code</code>, <code>task_status_raw</code>를 표시. 이슈가 있으면 붉은 톤으로 강조됩니다.</li>
+<li><strong>상세 정보 (접기)</strong>: AMR ID, IP, 각도(°), 맵, 마지막 수신 시간.</li>
+<li><strong>태스크</strong>: 해당 AMR에 할당된 태스크 최근 20건. <code>RUNNING</code> 태스크는 좌측 파란색 바로 강조되고 상단에 뱃지 카운트가 뜹니다. 20건을 넘으면 “이전 태스크 N건 더보기” 버튼으로 확장 가능.</li>
+<li><strong>로봇 팔 (Doosan)</strong>: 관절별 온도/위치/토크/전류 표, ROBOT_STATUS, VISION_ERROR 등. 온도가 50도 이상이면 붉은색, 40도 이상이면 노란색으로 표시됩니다. 2초 주기 폴링.</li>
+</ol>
+<hr>
+<h2>5. AMR 제거</h2>
+<p><strong>상세 모달 하단 좌측</strong>의 빨간색 <strong>삭제</strong> 버튼을 누르면 확인 Popconfirm이 표시됩니다.</p>
+<p><img src="images/08-amr-delete-confirm.png" alt="AMR 삭제 확인"></p>
+<p><em>AMR 삭제 확인</em></p>
+<p><strong>삭제</strong>를 최종 확인하면 <code>DELETE /api/amr/:id</code>가 호출되고, 리스트에서 해당 AMR이 사라집니다.</p>
+<p><img src="images/09-amr-delete-done.png" alt="삭제 완료"></p>
+<p><em>삭제 완료</em></p>
+<blockquote>
+<p>⚠️ 삭제 후에는 복구할 수 없습니다. 해당 AMR의 기존 태스크 이력은 DB에 남아있을 수 있습니다.</p>
+</blockquote>
+<hr>
+<h2>6. AMR 이동 명령</h2>
+<p>AMR을 특정 스테이션으로 보내는 방법은 두 가지입니다.</p>
+<h3>방법 A — 지도에서 우클릭 (권장)</h3>
+<ol>
+<li>대시보드 하단 지도 캔버스에서 목적지로 사용할 <strong>스테이션 아이콘 위에서 우클릭</strong>합니다.</li>
+<li>표시되는 컨텍스트 메뉴에서 <strong>해당 스테이션으로 보낼 AMR</strong>을 선택합니다.</li>
+<li>백엔드가 <code>POST /api/amr/:id/navigate</code>를 호출해 이동 명령을 전송하고, 성공 시 상단 토스트에 “<code>&lt;AMR 이름&gt;</code> → <code>&lt;스테이션&gt;</code> 이동 명령 전송 완료” 메시지가 표시됩니다.</li>
+</ol>
+<blockquote>
+<p>ℹ️ 빈 공간이 아닌 <strong>스테이션 위에서</strong> 우클릭해야 메뉴가 뜹니다.</p>
+</blockquote>
+<h3>방법 B — 설정 &gt; 이동 지시 테스트 탭 (MES API 시뮬레이션)</h3>
+<p><img src="images/15-settings-move-cmd.png" alt="설정 &gt; 이동 지시 테스트"></p>
+<p><em>설정 &gt; 이동 지시 테스트</em></p>
+<ol>
+<li><strong>Task ID</strong>: 고유 숫자. 우측의 <strong>자동</strong> 텍스트를 클릭하면 현재 시각 기준으로 6자리가 자동 입력됩니다.</li>
+<li><strong>AMR</strong>: 목록에서 선택(상태가 함께 표시됨).</li>
+<li><strong>Action</strong>: <code>EXECUTE</code> — 태스크 생성 및 이동 시작. <code>CANCEL</code> — 해당 Task ID 태스크 취소.</li>
+<li><strong>목적지</strong>: 현재 맵의 스테이션 중 선택.</li>
+<li><strong>전송</strong> 버튼을 누르면 <code>POST /api/move-command</code>가 호출되고, 하단에 <code>result_msg</code>와 <code>server_time</code>이 표시됩니다.</li>
+</ol>
+<hr>
+<h2>7. 태스크 확인 및 취소(삭제)</h2>
+<h3>7-1. AMR 상세 모달에서 확인</h3>
+<p>AMR 상세 모달의 <strong>태스크</strong> 섹션에서 해당 AMR에 할당된 최근 태스크를 확인할 수 있습니다. 각 행은 Task ID, 타입(<code>MOVE</code>/<code>ARM</code>), 상태(<code>PENDING</code>/<code>RUNNING</code>/<code>DONE</code>/<code>FAILED</code>/<code>CANCELED</code>), 에러 코드, 생성 시각을 표시합니다.</p>
+<h3>7-2. 설정 &gt; 이동 지시 테스트 탭의 태스크 목록</h3>
+<p><img src="images/15-settings-move-cmd.png" alt="태스크 목록 표시"></p>
+<p><em>태스크 목록 표시</em></p>
+<ul>
+<li><strong>상태별 색상</strong>: RUNNING(파랑 processing), FINISHED(초록), ERROR(빨강), CANCELLED(회색), PENDING(주황).</li>
+<li><strong>새로고침</strong> 버튼 또는 3초 주기 폴링으로 자동 갱신됩니다.</li>
+</ul>
+<h3>7-3. 태스크 취소(삭제)</h3>
+<p>태스크를 삭제(취소)하려면 해당 태스크의 <strong>Task ID</strong>를 그대로 넣고 Action을 <strong>CANCEL</strong>로 바꿔 전송합니다.</p>
+<p><img src="images/16-settings-task-cancel-form.png" alt="CANCEL 요청 폼"></p>
+<p><em>CANCEL 요청 폼</em></p>
+<ul>
+<li><code>EXECUTE</code>로 만들어진 태스크라도 <code>RUNNING</code> 중간에 <code>CANCEL</code>을 보내면 백엔드가 태스크를 중단 처리하고 상태가 <code>CANCELLED</code>로 바뀝니다.</li>
+<li>로봇 팔 태스크는 <strong>설정 &gt; 로봇 팔 테스트</strong> 탭에서 동일한 방식으로 <code>CANCEL</code>을 전송합니다.</li>
+</ul>
+<p><img src="images/17-settings-arm-cmd.png" alt="설정 &gt; 로봇 팔 테스트"></p>
+<p><em>설정 &gt; 로봇 팔 테스트</em></p>
+<hr>
+<h2>8. 맵 관리</h2>
+<p>관리자 계정만 접근 가능합니다. 좌측 사이드바에서 <strong>맵 관리</strong>를 선택합니다.</p>
+<p><img src="images/11-map-management.png" alt="맵 관리 페이지"></p>
+<p><em>맵 관리 페이지</em></p>
+<ul>
+<li><strong>업로드</strong>: <code>.json</code> 또는 <code>.smap</code> 파일 업로드. 업로드 즉시 목록에 추가되며, DB에 스테이션/경로 정보가 함께 저장됩니다.</li>
+<li><strong>미리보기</strong>: 맵 행의 👁 버튼으로 캔버스에서 스테이션/경로 확인.</li>
+<li><strong>현재 맵 지정</strong>: ✓ 버튼을 누르면 해당 맵이 대시보드의 기본 맵으로 설정됩니다.</li>
+<li><strong>AMR 맵 불러오기</strong>: AMR 컨트롤러에서 저장된 맵을 내려받아 ACS에 등록할 수 있습니다.</li>
+<li><strong>삭제</strong>: 🗑 버튼, 확인 후 DB에서 제거됩니다.</li>
+</ul>
+<hr>
+<h2>9. 통신 로그</h2>
+<p>관리자 전용. ACS 서버가 MES/로봇과 주고받은 요청/응답 로그를 확인합니다.</p>
+<p><img src="images/12-log-page.png" alt="통신 로그 페이지"></p>
+<p><em>통신 로그 페이지</em></p>
+<ul>
+<li>방향(IN/OUT), 시간, 엔드포인트, 페이로드, 상태 코드 등을 시간순으로 표시합니다.</li>
+<li>문제가 의심되는 구간의 요청·응답 원문을 그대로 확인할 수 있어 트러블슈팅에 사용됩니다.</li>
+</ul>
+<hr>
+<h2>10. 설정 페이지</h2>
+<p>관리자 전용. 4개의 탭이 있습니다.</p>
+<h3>10-1. 시스템 설정</h3>
+<p><img src="images/13-settings-system.png" alt="시스템 설정 탭"></p>
+<p><em>시스템 설정 탭</em></p>
+<p>키–값 형태로 시스템 동작에 필요한 파라미터(예: <code>mes_ip</code>, 폴링 주기, 타임아웃 등)를 관리합니다. <strong>설정 추가 / 수정(연필 버튼) / 삭제(휴지통)</strong> 기능을 제공합니다.</p>
+<h3>10-2. 사용자 관리</h3>
+<p><img src="images/14-settings-users.png" alt="사용자 관리 탭"></p>
+<p><em>사용자 관리 탭</em></p>
+<ul>
+<li>시스템 접속 계정을 추가/수정/삭제합니다.</li>
+<li><strong>역할</strong>: <code>admin</code> 또는 <code>user</code>. 일반 사용자는 대시보드만 볼 수 있습니다.</li>
+<li><code>admin</code> 계정은 삭제할 수 없도록 보호되어 있습니다.</li>
+<li>비밀번호는 <strong>수정 시 공란이면 유지</strong>되고, 값이 있으면 새 비밀번호로 교체됩니다.</li>
+</ul>
+<h3>10-3. 이동 지시 테스트</h3>
+<p>앞서 <strong>6. AMR 이동 명령</strong>, <strong>7. 태스크 확인/취소</strong>에서 설명한 MOVE_COMMAND 시뮬레이터입니다.</p>
+<h3>10-4. 로봇 팔 테스트</h3>
+<p><img src="images/17-settings-arm-cmd.png" alt="로봇 팔 테스트 탭"></p>
+<p><em>로봇 팔 테스트 탭</em></p>
+<p>ARM_COMMAND(로봇 팔 이송 작업)를 시뮬레이션합니다. 입력 파라미터는 <code>from_location_id1/2</code>, <code>to_location_id1/2</code>, <code>vision_check</code>(0 또는 1)이며, 완료 시점은 DI11 신호 수신을 기다립니다.</p>
+<hr>
+<h2>11. 시스템 재시작(PM2)</h2>
+<p>ACS 백엔드/프론트엔드는 <strong>PM2</strong>로 관리됩니다(<code>ecosystem.config.cjs</code> 기준: <code>acs-backend</code>, <code>acs-frontend-dev</code>).</p>
+<p>터미널에서 다음 명령을 사용합니다.</p>
+<pre><code class="language-bash"># 현재 상태 조회
+pm2 status
+
+# 전체 재시작
+pm2 restart all
+
+# 개별 재시작
+pm2 restart acs-backend
+pm2 restart acs-frontend-dev
+
+# 실시간 로그 확인
+pm2 logs acs-backend --lines 100
+pm2 logs acs-frontend-dev --lines 100
+
+# 멈춘 프로세스만 되살리기
+pm2 resurrect
+
+# 시스템 부팅 시 자동 실행 등록
+pm2 startup
+pm2 save
+</code></pre>
+<blockquote>
+<p>⚠️ **<code>pm2 restart all</code>**은 서비스가 재기동되는 수 초 동안 프론트엔드 화면이 일시적으로 응답하지 않을 수 있습니다.</p>
+<ul>
+<li>연결이 끊긴 AMR은 재기동 후 자동으로 다시 연결 시도됩니다(<code>autorestart: true</code>).</li>
+<li>긴급 정지가 필요할 땐 <code>pm2 stop all</code>, 재개는 <code>pm2 start all</code>을 사용합니다.</li>
+</ul>
+</blockquote>
+<h3>트러블슈팅 체크리스트</h3>
+<ol>
+<li><code>pm2 status</code>에서 <code>errored</code>/<code>stopped</code> 프로세스가 없는지 확인</li>
+<li><code>pm2 logs acs-backend --lines 200</code> 로 스택 트레이스 확인</li>
+<li>포트 충돌 여부 확인: <code>lsof -i :3000 -i :5173 -i :8080</code></li>
+<li>DB 접속 가능 여부, 설정 페이지 &gt; <strong>시스템 설정</strong> 값 검증</li>
+<li>필요 시 <code>pm2 flush</code>로 로그 초기화 후 <code>pm2 restart all</code></li>
+</ol>
+<hr>
+<h2>12. 로그아웃</h2>
+<p>우측 상단 <strong>사용자 아바타</strong>를 클릭하면 드롭다운 메뉴가 나타납니다.</p>
+<p><img src="images/18-user-dropdown.png" alt="사용자 메뉴"></p>
+<p><em>사용자 메뉴</em></p>
+<p><strong>로그아웃</strong>을 선택하면 localStorage의 세션 정보가 제거되고 <code>/login</code> 페이지로 이동합니다.</p>
+<hr>
+<h3>부록 A — AMR 상태 값 정의</h3>
+<table>
+<thead>
+<tr>
+<th>상태</th>
+<th>한글</th>
+<th>설명</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>IDLE</code></td>
+<td>대기</td>
+<td>정상 연결됨, 명령 대기 중</td>
+</tr>
+<tr>
+<td><code>MOVING</code></td>
+<td>이동</td>
+<td>이동 명령 수행 중</td>
+</tr>
+<tr>
+<td><code>STOP</code></td>
+<td>정지</td>
+<td><code>stop_code</code> 기반 의도적 정지</td>
+</tr>
+<tr>
+<td><code>ERROR</code></td>
+<td>오류</td>
+<td>에러 발생 (<code>additional_info.errors</code> 참조)</td>
+</tr>
+<tr>
+<td><code>E-STOP</code></td>
+<td>비상정지</td>
+<td>물리 비상정지 버튼 눌림</td>
+</tr>
+<tr>
+<td><code>NO_CONN</code></td>
+<td>연결 끊김</td>
+<td>네트워크 단절 또는 전원 오프</td>
+</tr>
+</tbody></table>
+<h3>부록 B — 태스크 상태 값 정의</h3>
+<table>
+<thead>
+<tr>
+<th>상태</th>
+<th>색상</th>
+<th>의미</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>PENDING</code></td>
+<td>주황</td>
+<td>접수됨, 실행 대기</td>
+</tr>
+<tr>
+<td><code>RUNNING</code></td>
+<td>파랑</td>
+<td>실행 중</td>
+</tr>
+<tr>
+<td><code>FINISHED</code> / <code>DONE</code></td>
+<td>초록</td>
+<td>정상 완료</td>
+</tr>
+<tr>
+<td><code>ERROR</code> / <code>FAILED</code></td>
+<td>빨강</td>
+<td>실패 (<code>error_code</code> 참조)</td>
+</tr>
+<tr>
+<td><code>CANCELLED</code> / <code>CANCELED</code></td>
+<td>회색</td>
+<td><code>CANCEL</code> 요청 또는 취소됨</td>
+</tr>
+</tbody></table>
+<p><em>본 매뉴얼은 <code>docs/manual/generate.mjs</code>에 의해 실제 화면을 캡처해 자동 생성되었습니다.</em></p>
+
+</body>
+</html>
