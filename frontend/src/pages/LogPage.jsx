@@ -394,7 +394,7 @@ function MainLogTab({ token }) {
           onChange={(v) => handleFilterChange('interface_ids', v)}
           allowClear
           maxTagCount="responsive"
-          style={{ minWidth: 200, maxWidth: 400 }}
+          style={{ minWidth: 260, maxWidth: 400 }}
           size="small"
         />
         <Select
