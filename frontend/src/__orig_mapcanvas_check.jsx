@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useMemo, useCallback, useImperativeHandle, forwardRef } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { theme } from 'antd';
 
 /* 안전한 JSON 파싱 */
@@ -22,29 +22,16 @@ function lerpAngle(a, b, t) {
   return a + diff * t;
 }
 
-/* 월드 좌표 → 화면 좌표 (offset 변화에 대해 선형 = 단순 평행이동) */
-function project(x, y, h, sf, scale, offset) {
-  return {
-    x: x * sf * scale + offset.x,
-    y: h - (y * sf * scale + offset.y),
-  };
-}
-
 const ICON_MM = { width: 800, height: 1200 };
 const AMR_LERP_SPEED = 0.15; // 0~1 — AMR 위치 보간 속도 (프레임당)
-const TRACK_LERP_SPEED = 0.12; // 추적 시 카메라 보간 속도
-const TRACK_SNAP = 0.3;
-const FRAME_MS = 33; // ~30fps
 
 /**
  * 맵 캔버스 컴포넌트
- * - stations / paths / normalPoints 그리기 (정적 레이어 → 오프스크린 캔버스에 캐시)
- * - AMR 위치 표시 (화살표) — lerp 보간으로 부드러운 이동 (동적 레이어)
- * - 패닝 & 줌 / station·AMR 호버 툴팁 / AMR 추적 (trackAmrName)
- *
- * 성능: 맵 데이터는 useMemo로 한 번만 파싱하고, 정적 맵은 오프스크린 캔버스에
- * 캐시한 뒤 매 프레임 복사만 한다. 펄스/보간/추적은 단일 RAF에서 ref로 처리하여
- * 프레임당 React 리렌더를 발생시키지 않는다.
+ * - stations / paths / normalPoints 그리기
+ * - AMR 위치 표시 (화살표) — lerp 보간으로 부드러운 이동
+ * - 패닝 & 줌
+ * - station/AMR 호버 툴팁
+ * - AMR 추적 (trackAmrName)
  */
 const MapCanvas = forwardRef(function MapCanvas({ mapData, amrs = [], trackAmrName = null, onNavigate }, ref) {
   const { token } = theme.useToken();
@@ -63,20 +50,12 @@ const MapCanvas = forwardRef(function MapCanvas({ mapData, amrs = [], trackAmrNa
   // 우클릭 컨텍스트 메뉴
   const [ctxMenu, setCtxMenu] = useState(null); // { station, x, y }
 
-  /* ── 맵 데이터 파싱 (mapData 변경 시 1회만) ── */
-  const parsed = useMemo(() => {
-    const addInfo = safeParse(mapData?.additional_info);
-    return {
-      header: addInfo.header || {},
-      normalPoints: addInfo.normalPosList ?? addInfo.normalPointList ?? [],
-      paths: safeParse(mapData?.paths).paths ?? [],
-      stations: safeParse(mapData?.stations).stations ?? [],
-    };
-  }, [mapData]);
-
   // ─── AMR 보간 위치 (렌더용) ───
-  const interpolatedRef = useRef({}); // { [amr_name]: { x, y, deg } }
-  const amrTargetsRef = useRef({});   // { [amr_name]: { x, y, deg } }
+  // { [amr_name]: { x, y, deg } } — 실제 렌더에 사용하는 위치
+  const interpolatedRef = useRef({});
+
+  // amrs 폴링 데이터가 바뀌면 target 업데이트
+  const amrTargetsRef = useRef({}); // { [amr_name]: { x, y, deg, status, ...rest } }
   useEffect(() => {
     const targets = {};
     for (const amr of amrs) {
@@ -85,6 +64,7 @@ const MapCanvas = forwardRef(function MapCanvas({ mapData, amrs = [], trackAmrNa
         y: amr.pos_y ?? 0,
         deg: amr.deg ?? 0,
       };
+      // 처음 보는 AMR이면 즉시 위치 설정
       if (!interpolatedRef.current[amr.amr_name]) {
         interpolatedRef.current[amr.amr_name] = {
           x: amr.pos_x ?? 0,
@@ -96,32 +76,50 @@ const MapCanvas = forwardRef(function MapCanvas({ mapData, amrs = [], trackAmrNa
     amrTargetsRef.current = targets;
   }, [amrs]);
 
-  /* AMR 상태 → 색상 */
-  const getAmrColor = useCallback((amr) => {
-    const s = amr.status;
-    if (s === 'NO_CONN') return '#d9d9d9';
-    if (s === 'E-STOP') return '#eb2f96';
-    if (s === 'ERROR') return '#ff4d4f';
-    if (s === 'STOP') return '#faad14';
-    if (s === 'MOVING') return token.colorPrimary;
-    if (s === 'IDLE') return '#52c41a';
-    return '#8c8c8c';
-  }, [token.colorPrimary]);
-
-  /* ── 렌더 입력값을 ref로 동기화 (RAF 루프가 최신값을 읽도록) ── */
-  const renderRef = useRef({ scale, offset, sf, parsed, amrs, getAmrColor, trackAmrName });
+  // 펄스 + AMR 보간 — 단일 requestAnimationFrame 루프
+  const [pulseTime, setPulseTime] = useState(0);
+  const [renderTick, setRenderTick] = useState(0);
   useEffect(() => {
-    renderRef.current = { scale, offset, sf, parsed, amrs, getAmrColor, trackAmrName };
-  });
+    let id;
+    let lastT = 0;
+    const animate = (t) => {
+      // 펄스 30fps
+      if (t - lastT >= 33) {
+        setPulseTime(t);
+        lastT = t;
 
-  // 파싱 데이터가 바뀌면 정적 레이어 캐시 무효화용 버전 증가
-  const parsedVerRef = useRef(0);
-  useEffect(() => { parsedVerRef.current += 1; }, [parsed]);
-
-  // 펄스 시간(ref) / 오프스크린 정적 캔버스 / 캐시 시그니처
-  const pulseRef = useRef(0);
-  const staticCanvasRef = useRef(null);
-  const staticKeyRef = useRef('');
+        // AMR 위치 보간
+        const targets = amrTargetsRef.current;
+        const interp = interpolatedRef.current;
+        let changed = false;
+        for (const name of Object.keys(targets)) {
+          const tgt = targets[name];
+          const cur = interp[name];
+          if (!cur) {
+            interp[name] = { ...tgt };
+            changed = true;
+            continue;
+          }
+          const dx = tgt.x - cur.x;
+          const dy = tgt.y - cur.y;
+          if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
+            cur.x += dx * AMR_LERP_SPEED;
+            cur.y += dy * AMR_LERP_SPEED;
+            cur.deg = lerpAngle(cur.deg, tgt.deg, AMR_LERP_SPEED);
+            changed = true;
+          } else {
+            cur.x = tgt.x;
+            cur.y = tgt.y;
+            cur.deg = tgt.deg;
+          }
+        }
+        if (changed) setRenderTick((v) => v + 1);
+      }
+      id = requestAnimationFrame(animate);
+    };
+    animate(0);
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   /* 외부에서 호출 가능한 centerOn 메서드 */
   useImperativeHandle(ref, () => ({
@@ -146,7 +144,6 @@ const MapCanvas = forwardRef(function MapCanvas({ mapData, amrs = [], trackAmrNa
     c.style.width = `${rect.width}px`;
     c.style.height = `${rect.height}px`;
     c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
-    staticKeyRef.current = ''; // 사이즈 변경 → 정적 캐시 무효화
   }, []);
 
   useEffect(() => {
@@ -155,10 +152,11 @@ const MapCanvas = forwardRef(function MapCanvas({ mapData, amrs = [], trackAmrNa
     return () => window.removeEventListener('resize', fitCanvas);
   }, [fitCanvas]);
 
-  /* 맵 변경 시 중앙 세팅 */
+  /* 맵 변경 시 중앙 세팅 */ 
   useEffect(() => {
     if (!contRef.current || !mapData) return;
-    const { minPos, maxPos, resolution } = parsed.header;
+    const hdr = safeParse(mapData.additional_info).header || {};
+    const { minPos, maxPos, resolution } = hdr;
     if (!minPos || !maxPos) return;
 
     const nSf = resolution ? 1 / resolution : 1;
@@ -169,124 +167,154 @@ const MapCanvas = forwardRef(function MapCanvas({ mapData, amrs = [], trackAmrNa
     const rect = contRef.current.getBoundingClientRect();
     setScale(1.5);
     setOffset({
-      x: (rect.width / 2 - midX * nSf * 1.5) - 650,
+      x: (rect.width / 2 - midX * nSf * 1.5 ) - 650,
       y: (rect.height / 2 - midY * nSf * 1.5) - 200,
     });
-  }, [mapData, parsed]);
+  }, [mapData]);
 
-  /* ── 정적 레이어(점/경로/스테이션)를 오프스크린 캔버스에 그리기 ── */
-  const drawStaticInto = useCallback((octx, cssW, cssH) => {
-    const { parsed: p, sf: _sf, scale: _scale, offset: _offset } = renderRef.current;
-    octx.clearRect(0, 0, cssW, cssH);
-    const rPix = ((ICON_MM.width / 1000) * _sf * _scale) / 6;
-    const tf = (x, y) => project(x, y, cssH, _sf, _scale, _offset);
+  /* AMR 추적 — 부드러운 lerp 애니메이션으로 중앙 유지 */
+  const trackTargetRef = useRef(null);
+
+  // 추적 대상의 목표 오프셋 계산 (보간 위치 기준)
+  useEffect(() => {
+    if (!trackAmrName || !contRef.current) {
+      trackTargetRef.current = null;
+      return;
+    }
+    const ipos = interpolatedRef.current[trackAmrName];
+    if (!ipos) return;
+    const rect = contRef.current.getBoundingClientRect();
+    trackTargetRef.current = {
+      x: rect.width / 2 - ipos.x * sf * scale,
+      y: rect.height / 2 - ipos.y * sf * scale,
+    };
+  }, [trackAmrName, renderTick, sf, scale]);
+
+  // 부드러운 보간 루프
+  useEffect(() => {
+    if (!trackAmrName) return;
+    let rafId;
+    const LERP_SPEED = 0.12; // 0~1 — 클수록 빠름
+    const SNAP_THRESHOLD = 0.3;
+
+    const tick = () => {
+      const tgt = trackTargetRef.current;
+      if (tgt) {
+        setOffset((prev) => {
+          const dx = tgt.x - prev.x;
+          const dy = tgt.y - prev.y;
+          if (Math.abs(dx) < SNAP_THRESHOLD && Math.abs(dy) < SNAP_THRESHOLD) return tgt;
+          return {
+            x: prev.x + dx * LERP_SPEED,
+            y: prev.y + dy * LERP_SPEED,
+          };
+        });
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [trackAmrName]);
+
+  /* 좌표 변환 */
+  const transform = useCallback(
+    (x, y) => {
+      const h = contRef.current?.getBoundingClientRect().height || 0;
+      return {
+        x: x * sf * scale + offset.x,
+        y: h - (y * sf * scale + offset.y),
+      };
+    },
+    [sf, scale, offset]
+  );
+
+  const rPix = ((ICON_MM.width / 1000) * sf * scale) / 6;
+
+  /* AMR 상태 → 색상 */
+  const getAmrColor = useCallback((amr) => {
+    const s = amr.status;
+    if (s === 'NO_CONN') return '#d9d9d9';
+    if (s === 'E-STOP') return '#eb2f96';
+    if (s === 'ERROR') return '#ff4d4f';
+    if (s === 'STOP') return '#faad14';
+    if (s === 'MOVING') return token.colorPrimary;
+    if (s === 'IDLE') return '#52c41a';
+    return '#8c8c8c';
+  }, [token.colorPrimary]);
+
+  /* 그리기 */
+  useEffect(() => {
+    const c = canvRef.current;
+    if (!c || !mapData) return;
+    const ctx = c.getContext('2d');
+    const rect = contRef.current.getBoundingClientRect();
+    ctx.clearRect(0, 0, rect.width * 2, rect.height * 2);
 
     // normalPosList
-    const normalPoints = p.normalPoints;
+    const addInfo = safeParse(mapData.additional_info);
+    const normalPoints = addInfo.normalPosList ?? addInfo.normalPointList ?? [];
     if (normalPoints.length) {
-      octx.fillStyle = '#000';
-      octx.beginPath();
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
       normalPoints.forEach((pt) => {
-        const { x, y } = tf(pt.x, pt.y);
-        octx.moveTo(x + 0.5, y);
-        octx.arc(x, y, 0.5, 0, Math.PI * 2);
+        const { x, y } = transform(pt.x, pt.y);
+        ctx.moveTo(x + 0.5, y);
+        ctx.arc(x, y, 0.5, 0, Math.PI * 2);
       });
-      octx.fill();
+      ctx.fill();
     }
 
     // paths
-    const stations = p.stations;
-    if (p.paths.length) {
-      octx.strokeStyle = 'rgba(255, 77, 79, 0.5)';
-      octx.lineWidth = 1;
-      octx.beginPath();
-      p.paths.forEach((path) => {
-        let s = path.coordinates?.start;
-        let e = path.coordinates?.end;
+    const paths = safeParse(mapData.paths).paths ?? [];
+    const stations = safeParse(mapData.stations).stations ?? [];
+    if (paths.length) {
+      ctx.strokeStyle = 'rgba(255, 77, 79, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      paths.forEach((p) => {
+        let s = p.coordinates?.start;
+        let e = p.coordinates?.end;
         if (!s || !e) {
-          s = stations.find((st) => String(st.id) === String(path.start));
-          e = stations.find((st) => String(st.id) === String(path.end));
+          s = stations.find((st) => String(st.id) === String(p.start));
+          e = stations.find((st) => String(st.id) === String(p.end));
         }
         if (!s || !e) return;
-        const sp = tf(s.x, s.y);
-        const ep = tf(e.x, e.y);
-        octx.moveTo(sp.x, sp.y);
-        octx.lineTo(ep.x, ep.y);
+        const sp = transform(s.x, s.y);
+        const ep = transform(e.x, e.y);
+        ctx.moveTo(sp.x, sp.y);
+        ctx.lineTo(ep.x, ep.y);
       });
-      octx.stroke();
+      ctx.stroke();
     }
 
     // stations
     if (stations.length) {
-      octx.fillStyle = '#fa8c16';
-      octx.beginPath();
+      ctx.fillStyle = '#fa8c16';
+      ctx.beginPath();
       stations.forEach((st) => {
-        const pt = tf(st.x, st.y);
-        octx.moveTo(pt.x + rPix, pt.y);
-        octx.arc(pt.x, pt.y, rPix, 0, Math.PI * 2);
+        const p = transform(st.x, st.y);
+        ctx.moveTo(p.x + rPix, p.y);
+        ctx.arc(p.x, p.y, rPix, 0, Math.PI * 2);
       });
-      octx.fill();
+      ctx.fill();
 
-      octx.fillStyle = '#595959';
-      octx.font = `${Math.max(9, 11 * _scale)}px sans-serif`;
-      octx.textAlign = 'center';
-      octx.textBaseline = 'top';
+      ctx.fillStyle = '#595959';
+      ctx.font = `${Math.max(9, 11 * scale)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
       stations.forEach((st) => {
-        const pt = tf(st.x, st.y);
-        octx.fillText(st.name || st.id, pt.x, pt.y + rPix + 2);
+        const p = transform(st.x, st.y);
+        ctx.fillText(st.name || st.id, p.x, p.y + rPix + 2);
       });
     }
-  }, []);
 
-  /* 정적 캐시 보장 — 변경(맵/줌/패닝/사이즈)된 경우에만 재생성 */
-  const ensureStatic = useCallback(() => {
-    const cont = contRef.current;
-    if (!cont) return null;
-    const rect = cont.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return null;
-    const dpr = window.devicePixelRatio || 1;
-    const { sf: _sf, scale: _scale, offset: _offset } = renderRef.current;
-
-    const sig = [
-      parsedVerRef.current,
-      _sf,
-      _scale,
-      Math.round(_offset.x),
-      Math.round(_offset.y),
-      Math.round(rect.width),
-      Math.round(rect.height),
-      dpr,
-    ].join('|');
-
-    let oc = staticCanvasRef.current;
-    if (!oc) {
-      oc = document.createElement('canvas');
-      staticCanvasRef.current = oc;
-    }
-    if (staticKeyRef.current !== sig) {
-      oc.width = Math.max(1, Math.floor(rect.width * dpr));
-      oc.height = Math.max(1, Math.floor(rect.height * dpr));
-      const octx = oc.getContext('2d');
-      octx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawStaticInto(octx, rect.width, rect.height);
-      staticKeyRef.current = sig;
-    }
-    return oc;
-  }, [drawStaticInto]);
-
-  /* 동적 레이어(AMR 화살표/펄스/라벨) — 매 프레임 */
-  const drawDynamic = useCallback((ctx, cssW, cssH) => {
-    const { sf: _sf, scale: _scale, offset: _offset, amrs: _amrs, getAmrColor: _getColor } = renderRef.current;
-    const tf = (x, y) => project(x, y, cssH, _sf, _scale, _offset);
+    // AMRs — 보간된 위치 사용
     const interp = interpolatedRef.current;
-    const pulseTime = pulseRef.current;
-
-    _amrs.forEach((amr) => {
+    amrs.forEach((amr) => {
       const ipos = interp[amr.amr_name] || { x: amr.pos_x ?? 0, y: amr.pos_y ?? 0, deg: amr.deg ?? 0 };
-      const p = tf(ipos.x, ipos.y);
-      const color = _getColor(amr);
-      const sizePx = Math.max(10, (ICON_MM.width / 1000) * _sf * _scale * 0.8);
-
+      const p = transform(ipos.x, ipos.y);
+      const color = getAmrColor(amr);
+      const sizePx = Math.max(10, (ICON_MM.width / 1000) * sf * scale * 0.8);
       // 펄스
       if (amr.status !== 'NO_CONN') {
         const phase = (pulseTime % 2000) / 2000;
@@ -320,99 +348,12 @@ const MapCanvas = forwardRef(function MapCanvas({ mapData, amrs = [], trackAmrNa
 
       // 이름 라벨
       ctx.fillStyle = '#262626';
-      ctx.font = `bold ${Math.max(9, 10 * _scale)}px sans-serif`;
+      ctx.font = `bold ${Math.max(9, 10 * scale)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillText(amr.amr_name, p.x, p.y + sizePx * 0.6 + 3);
     });
-  }, []);
-
-  /* 한 프레임 렌더: 정적 캐시 복사 + 동적 레이어 */
-  const drawFrame = useCallback(() => {
-    const c = canvRef.current;
-    const cont = contRef.current;
-    if (!c || !cont) return;
-    const rect = cont.getBoundingClientRect();
-    const ctx = c.getContext('2d');
-    const oc = ensureStatic();
-
-    // 정적 레이어 1:1 복사 (device px)
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, c.width, c.height);
-    if (oc) ctx.drawImage(oc, 0, 0);
-    ctx.restore(); // fitCanvas가 설정한 dpr 변환으로 복귀
-
-    drawDynamic(ctx, rect.width, rect.height);
-  }, [ensureStatic, drawDynamic]);
-
-  /* ── 단일 RAF 루프: 펄스 + AMR 보간 + 추적 카메라 + 렌더 ── */
-  useEffect(() => {
-    let rafId;
-    let lastT = 0;
-    const frame = (t) => {
-      if (t - lastT >= FRAME_MS) {
-        lastT = t;
-        pulseRef.current = t;
-
-        // AMR 위치 보간
-        const targets = amrTargetsRef.current;
-        const interp = interpolatedRef.current;
-        for (const name of Object.keys(targets)) {
-          const tgt = targets[name];
-          const cur = interp[name];
-          if (!cur) {
-            interp[name] = { ...tgt };
-            continue;
-          }
-          const dx = tgt.x - cur.x;
-          const dy = tgt.y - cur.y;
-          if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
-            cur.x += dx * AMR_LERP_SPEED;
-            cur.y += dy * AMR_LERP_SPEED;
-            cur.deg = lerpAngle(cur.deg, tgt.deg, AMR_LERP_SPEED);
-          } else {
-            cur.x = tgt.x;
-            cur.y = tgt.y;
-            cur.deg = tgt.deg;
-          }
-        }
-
-        // 추적 카메라 (보간된 위치 기준으로 중앙 유지)
-        const track = renderRef.current.trackAmrName;
-        if (track && contRef.current) {
-          const ipos = interp[track];
-          if (ipos) {
-            const rect = contRef.current.getBoundingClientRect();
-            const { sf: _sf, scale: _scale, offset: _offset } = renderRef.current;
-            const tx = rect.width / 2 - ipos.x * _sf * _scale;
-            const ty = rect.height / 2 - ipos.y * _sf * _scale;
-            const dx = tx - _offset.x;
-            const dy = ty - _offset.y;
-            if (Math.abs(dx) > TRACK_SNAP || Math.abs(dy) > TRACK_SNAP) {
-              setOffset({ x: _offset.x + dx * TRACK_LERP_SPEED, y: _offset.y + dy * TRACK_LERP_SPEED });
-            }
-          }
-        }
-
-        drawFrame();
-      }
-      rafId = requestAnimationFrame(frame);
-    };
-    rafId = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(rafId);
-  }, [drawFrame]);
-
-  /* 좌표 변환 (마우스 히트테스트용) */
-  const transform = useCallback(
-    (x, y) => {
-      const h = contRef.current?.getBoundingClientRect().height || 0;
-      return project(x, y, h, sf, scale, offset);
-    },
-    [sf, scale, offset]
-  );
-
-  const rPix = ((ICON_MM.width / 1000) * sf * scale) / 6;
+  }, [mapData, amrs, transform, rPix, scale, pulseTime, getAmrColor, renderTick]);
 
   /* 마우스 이벤트 */
   const getPos = (e) => {
@@ -458,7 +399,8 @@ const MapCanvas = forwardRef(function MapCanvas({ mapData, amrs = [], trackAmrNa
         y: e.clientY,
       });
     } else {
-      const st = parsed.stations.find((s) => {
+      const stations = safeParse(mapData?.stations).stations ?? [];
+      const st = stations.find((s) => {
         const p = transform(s.x, s.y);
         const dx = p.x - pos.x;
         const dy = p.y - pos.y;
@@ -482,13 +424,15 @@ const MapCanvas = forwardRef(function MapCanvas({ mapData, amrs = [], trackAmrNa
   const onContextMenu = (e) => {
     e.preventDefault();
     const pos = getPos(e);
-    const hit = parsed.stations.find((s) => {
+    const stations = safeParse(mapData?.stations).stations ?? [];
+    const hit = stations.find((s) => {
       const p = transform(s.x, s.y);
       const dx = p.x - pos.x;
       const dy = p.y - pos.y;
       return dx * dx + dy * dy <= Math.max(rPix, 8) ** 2;
     });
     if (hit) {
+      // 컨테이너 기준 좌표
       const rect = contRef.current.getBoundingClientRect();
       setCtxMenu({
         station: hit,
@@ -506,7 +450,7 @@ const MapCanvas = forwardRef(function MapCanvas({ mapData, amrs = [], trackAmrNa
     const ns = Math.max(0.1, Math.min(scale * fac, 80));
 
     if (trackAmrName) {
-      // 추적 중엔 스케일만 변경 — RAF가 재센터링 처리
+      // 추적 중엔 스케일만 변경 — useEffect(centerOnAmr)가 재센터링 처리
       setScale(ns);
     } else {
       const p = getPos(e);
